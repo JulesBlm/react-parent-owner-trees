@@ -2,7 +2,7 @@
 // classic <script> tag (must load before the app bundle so bippy's hook is
 // installed before react-dom evaluates; classic scripts run during parse,
 // module scripts are deferred, so any position in <head> works).
-import { startExtraction, type InputNode } from "./extract";
+import { startExtraction, type InputNode } from "./lib/extract";
 import {
   parentTreeSvg,
   ownerTreeSvg,

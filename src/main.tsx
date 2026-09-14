@@ -1,6 +1,6 @@
 // extract must come first: bippy installs the DevTools hook on import, before
 // react-dom evaluates.
-import { getNodeSource, startExtraction } from "./extract";
+import { getNodeSource, startExtraction } from "./lib/extract";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { DemoApp } from "./demo/DemoApp";

@@ -2,7 +2,7 @@
 // the julesblom.com parents/owners posts: 25px grid, filled circles for
 // components, hollow circles for DOM nodes, solid elbow links for the tree
 // structure, dashed arcs for owner edges in the parent tree.
-import { contextName, type InputNode } from "./extract";
+import { contextName, type InputNode } from "./lib/extract";
 
 const GRID = 25;
 const SERVER_COLOR = "#d9822b";

@@ -26,3 +26,4 @@ dist-ssr
 # fixture build junk
 fixtures/next-rsc/.next
 fixtures/next-rsc/node_modules
+dist-app

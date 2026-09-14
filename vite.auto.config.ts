@@ -6,6 +6,8 @@ export default defineConfig({
     "process.env.NODE_ENV": JSON.stringify("development"),
   },
   build: {
+    // dist/ is shared with the tsup library build; don't wipe it
+    emptyOutDir: false,
     lib: {
       entry: "src/auto.ts",
       name: "ReactTreesTool",

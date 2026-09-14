@@ -1,12 +1,39 @@
 {
-  "name": "react-trees-tool",
+  "name": "@julesblom/react-trees",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    "./core": {
+      "types": "./dist/core.d.ts",
+      "import": "./dist/core.js"
+    },
+    "./extract": {
+      "types": "./dist/extract.d.ts",
+      "import": "./dist/extract.js"
+    }
+  },
   "scripts": {
     "dev": "vite",
     "build": "vite build",
+    "build:lib": "tsup",
+    "build:auto": "vite build --config vite.auto.config.ts",
     "preview": "vite preview"
+  },
+  "peerDependencies": {
+    "bippy": "^0.5.39",
+    "react": ">=19 <20"
+  },
+  "peerDependenciesMeta": {
+    "bippy": {
+      "optional": true
+    },
+    "react": {
+      "optional": true
+    }
   },
   "dependencies": {
     "bippy": "^0.5.39",
@@ -18,6 +45,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^4.4.0",
     "launch-editor": "^2.14.1",
+    "tsup": "^8.5.0",
     "typescript": "^5.8.0",
     "vite": "^6.3.0"
   },

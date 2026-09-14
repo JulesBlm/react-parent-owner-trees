@@ -37,4 +37,7 @@ export default defineConfig({
   // the creation-site stacks in _debugStack carry real line numbers and
   // cmd-click navigation lands where the JSX actually is.
   plugins: [react({ babel: { retainLines: true } }), openInEditor()],
+  // dist/ belongs to the published library (tsup + auto.global.js); the
+  // demo app build goes elsewhere so vite doesn't empty it.
+  build: { outDir: "dist-app" },
 });
