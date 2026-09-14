@@ -11,6 +11,10 @@
       "types": "./dist/core.d.ts",
       "import": "./dist/core.js"
     },
+    "./static": {
+      "types": "./dist/static.d.ts",
+      "import": "./dist/static.js"
+    },
     "./extract": {
       "types": "./dist/extract.d.ts",
       "import": "./dist/extract.js"

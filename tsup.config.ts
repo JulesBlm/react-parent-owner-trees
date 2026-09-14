@@ -6,6 +6,7 @@ import { defineConfig } from "tsup";
 export default defineConfig({
   entry: {
     core: "src/lib/core.ts",
+    static: "src/lib/static.ts",
     extract: "src/lib/extract.ts",
   },
   format: ["esm"],

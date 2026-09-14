@@ -1,35 +1,34 @@
 // extract must come first: bippy installs the DevTools hook on import, before
 // react-dom evaluates.
-import { getNodeSource, startExtraction } from "./lib/extract";
+import { contextName, getNodeSource, startExtraction } from "./lib/extract";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { DemoApp } from "./demo/DemoApp";
 import {
-  parentTreeSvg,
-  ownerTreeSvg,
-  toggleFold,
-  toggleContext,
-  toggleBoundary,
-  toggleMemo,
-  toggleSelect,
-  clearSelect,
-  setArcStyle,
-  setMarks,
-  setHooksMode,
-  toggleCollapse,
-  toggleHooks,
+  createTreeRenderer,
   type ArcStyle,
   type HooksMode,
-} from "./render-trees";
+  type InputNode,
+} from "./lib/core";
+
+const renderer = createTreeRenderer({
+  serverColor: "#d9822b",
+  sizing: "fixed",
+  sourceNav: true,
+  collapse: true,
+  hooks: true,
+  serverRegions: true,
+  contextName,
+});
 
 const parentEl = document.getElementById("parent-tree")!;
 const ownerEl = document.getElementById("owner-tree")!;
 
-let latestRoots: Parameters<typeof parentTreeSvg>[0] = [];
+let latestRoots: InputNode[] = [];
 
 function render() {
-  parentEl.innerHTML = parentTreeSvg(latestRoots);
-  ownerEl.innerHTML = ownerTreeSvg(latestRoots);
+  parentEl.innerHTML = renderer.parentTreeSvg(latestRoots);
+  ownerEl.innerHTML = renderer.ownerTreeSvg(latestRoots);
 }
 
 document.getElementById("panel")!.addEventListener("click", (event) => {
@@ -56,29 +55,32 @@ document.getElementById("panel")!.addEventListener("click", (event) => {
   const hooks = target.closest?.("[data-hooks-toggle]");
   const collapse = target.closest?.("[data-collapse-toggle]");
   const select = target.closest?.("[data-select-toggle]");
-  if (fold) toggleFold(fold.getAttribute("data-fold-toggle")!);
-  if (context) toggleContext(context.getAttribute("data-context-toggle")!);
-  if (boundary) toggleBoundary(boundary.getAttribute("data-boundary-toggle")!);
-  if (memoRing) toggleMemo(memoRing.getAttribute("data-memo-toggle")!);
-  if (hooks) toggleHooks(hooks.getAttribute("data-hooks-toggle")!);
-  if (collapse) toggleCollapse(collapse.getAttribute("data-collapse-toggle")!);
+  if (fold) renderer.toggleFold(fold.getAttribute("data-fold-toggle")!);
+  if (context)
+    renderer.toggleContext(context.getAttribute("data-context-toggle")!);
+  if (boundary)
+    renderer.toggleBoundary(boundary.getAttribute("data-boundary-toggle")!);
+  if (memoRing) renderer.toggleMemo(memoRing.getAttribute("data-memo-toggle")!);
+  if (hooks) renderer.toggleHooks(hooks.getAttribute("data-hooks-toggle")!);
+  if (collapse)
+    renderer.toggleCollapse(collapse.getAttribute("data-collapse-toggle")!);
   if (select && !fold && !context && !boundary && !memoRing && !hooks && !collapse)
-    toggleSelect(select.getAttribute("data-select-toggle")!);
+    renderer.toggleSelect(select.getAttribute("data-select-toggle")!);
   if (fold || context || boundary || memoRing || hooks || collapse || select)
     render();
 });
 
 document.addEventListener("keydown", (event) => {
-  if (event.key === "Escape" && clearSelect()) render();
+  if (event.key === "Escape" && renderer.clearSelect()) render();
 });
 
 document.getElementById("arc-style")!.addEventListener("change", (event) => {
-  setArcStyle((event.target as HTMLSelectElement).value as ArcStyle);
+  renderer.setArcStyle((event.target as HTMLSelectElement).value as ArcStyle);
   render();
 });
 
 document.getElementById("hooks-mode")!.addEventListener("change", (event) => {
-  setHooksMode((event.target as HTMLSelectElement).value as HooksMode);
+  renderer.setHooksMode((event.target as HTMLSelectElement).value as HooksMode);
   render();
 });
 
@@ -86,7 +88,7 @@ document.getElementById("hooks-mode")!.addEventListener("change", (event) => {
 // "where do the two trees diverge, in place". Default on, but on dense
 // apps the clean parent tree is sometimes the better read.
 document.getElementById("show-arcs")!.addEventListener("change", (event) => {
-  setMarks({ arcs: (event.target as HTMLInputElement).checked });
+  renderer.setMarks({ arcs: (event.target as HTMLInputElement).checked });
   render();
 });
 
@@ -97,7 +99,9 @@ startExtraction((roots) => {
 
 // Figure-export hook for the glossary post: stage marks from the console
 // (or a driving script), then lift the SVG straight out of the DOM.
-Object.assign(window, { __rt: { setMarks, render } });
+Object.assign(window, {
+  __rt: { setMarks: renderer.setMarks, renderer, render },
+});
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>

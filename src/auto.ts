@@ -2,19 +2,16 @@
 // classic <script> tag (must load before the app bundle so bippy's hook is
 // installed before react-dom evaluates; classic scripts run during parse,
 // module scripts are deferred, so any position in <head> works).
-import { startExtraction, type InputNode } from "./lib/extract";
-import {
-  parentTreeSvg,
-  ownerTreeSvg,
-  toggleFold,
-  toggleContext,
-  toggleBoundary,
-  toggleMemo,
-  setDepth,
-  setArcStyle,
-  setMarks,
-  type ArcStyle,
-} from "./render-trees";
+import { contextName, startExtraction } from "./lib/extract";
+import { createTreeRenderer, type ArcStyle, type InputNode } from "./lib/core";
+
+const renderer = createTreeRenderer({
+  serverColor: "#d9822b",
+  sizing: "fixed",
+  hooks: true,
+  serverRegions: true,
+  contextName,
+});
 
 // Scope to the RSC program the app author wrote: server components plus
 // everything they transitively own. The framework's own wrapper components
@@ -110,7 +107,6 @@ function createPanel() {
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer">
         <input type="checkbox" id="rt-app-only" checked /> app only
       </label>
-      <button id="rt-depth" style="cursor:pointer">depth</button>
       <select id="rt-arc-style" style="cursor:pointer">
         <option value="arc">arc</option>
         <option value="stadium">stadium</option>
@@ -159,15 +155,16 @@ function render() {
   )?.checked;
   let roots = scoped ? appOnly(latestRoots) : latestRoots;
   if (!showDom) roots = stripDom(roots);
-  panel.querySelector("#rt-parent")!.innerHTML = parentTreeSvg(roots);
-  panel.querySelector("#rt-owner")!.innerHTML = ownerTreeSvg(roots);
+  panel.querySelector("#rt-parent")!.innerHTML = renderer.parentTreeSvg(roots);
+  panel.querySelector("#rt-owner")!.innerHTML = renderer.ownerTreeSvg(roots);
 }
 
 panel.addEventListener("change", (event) => {
   const target = event.target as HTMLInputElement;
   if (target.id === "rt-arc-style")
-    setArcStyle(target.value as ArcStyle);
-  if (target.id === "rt-show-arcs") setMarks({ arcs: target.checked });
+    renderer.setArcStyle(target.value as ArcStyle);
+  if (target.id === "rt-show-arcs")
+    renderer.setMarks({ arcs: target.checked });
   if (
     target.id === "rt-show-dom" ||
     target.id === "rt-app-only" ||
@@ -183,43 +180,13 @@ panel.addEventListener("click", (event) => {
   const context = target.closest?.("[data-context-toggle]");
   const boundary = target.closest?.("[data-boundary-toggle]");
   const memoRing = target.closest?.("[data-memo-toggle]");
-  if (fold) toggleFold(fold.getAttribute("data-fold-toggle")!);
-  if (context) toggleContext(context.getAttribute("data-context-toggle")!);
-  if (boundary) toggleBoundary(boundary.getAttribute("data-boundary-toggle")!);
-  if (memoRing) toggleMemo(memoRing.getAttribute("data-memo-toggle")!);
+  if (fold) renderer.toggleFold(fold.getAttribute("data-fold-toggle")!);
+  if (context)
+    renderer.toggleContext(context.getAttribute("data-context-toggle")!);
+  if (boundary)
+    renderer.toggleBoundary(boundary.getAttribute("data-boundary-toggle")!);
+  if (memoRing) renderer.toggleMemo(memoRing.getAttribute("data-memo-toggle")!);
   if (fold || context || boundary || memoRing) render();
-});
-
-// Depth toggle: tween one scalar between the flat view and the two-world
-// split (server sheet behind, client sheet in front). The whole layout is a
-// lerp, so a single rAF loop redrawing per frame carries the rotation.
-let depthT = 0;
-let depthTarget = 0;
-let depthRaf = 0;
-
-const depthTick = () => {
-  depthT += (depthTarget - depthT) * 0.15;
-  if (Math.abs(depthTarget - depthT) < 0.004) {
-    depthT = depthTarget;
-    depthRaf = 0;
-  } else {
-    depthRaf = requestAnimationFrame(depthTick);
-  }
-  setDepth(depthT);
-  render();
-};
-
-panel.querySelector("#rt-depth")!.addEventListener("click", (event) => {
-  depthTarget = depthTarget === 0 ? 1 : 0;
-  (event.target as HTMLElement).textContent =
-    depthTarget === 1 ? "flat" : "depth";
-  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-    depthT = depthTarget;
-    setDepth(depthT);
-    render();
-  } else if (!depthRaf) {
-    depthRaf = requestAnimationFrame(depthTick);
-  }
 });
 
 startExtraction((roots) => {
