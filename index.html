@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>react-trees-tool</title>
+    <style>
+      :root {
+        --color-bg: #fdfdfd;
+        --color-text: #1a1a1a;
+        --color-text-light: #4a4a4a;
+        --color-text-lighter: #8a8a8a;
+      }
+      body {
+        margin: 0;
+        background: var(--color-bg);
+        color: var(--color-text);
+        font-family: system-ui, sans-serif;
+        display: grid;
+        grid-template-columns: minmax(280px, 1fr) 2fr;
+        min-height: 100vh;
+      }
+      #root {
+        padding: 1.5rem;
+        border-right: 1px solid #e5e5e5;
+      }
+      #panel {
+        padding: 1.5rem;
+        overflow: auto;
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 1rem;
+        align-items: start;
+      }
+      #panel h4 {
+        margin: 0 0 0.5rem;
+        font-weight: 500;
+        color: var(--color-text-lighter);
+      }
+      #panel svg {
+        font-family: monospace;
+        font-size: 13px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <aside id="panel">
+      <div style="grid-column: 1 / -1; font-size: 12px; color: var(--color-text-lighter)">
+        <label style="cursor: pointer">
+          <input type="checkbox" id="show-arcs" checked /> owner arcs
+        </label>
+        owner edges
+        <select id="arc-style">
+          <option value="arc">arc (semicircle)</option>
+          <option value="stadium">capped arc (stadium)</option>
+          <option value="bracket">bracket (lane)</option>
+          <option value="square">square corners</option>
+        </select>
+        hooks
+        <select id="hooks-mode">
+          <option value="trailing">trailing</option>
+          <option value="column">column</option>
+          <option value="off">off</option>
+        </select>
+      </div>
+      <div><h4>Parent tree</h4><div id="parent-tree"></div></div>
+      <div><h4>Owner tree</h4><div id="owner-tree"></div></div>
+    </aside>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

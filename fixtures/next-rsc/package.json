@@ -1,0 +1,12 @@
+{
+  "name": "next-rsc-fixture",
+  "private": true,
+  "scripts": {
+    "dev": "next dev -p 5175"
+  },
+  "dependencies": {
+    "next": "^15.5.0",
+    "react": "^19.1.0",
+    "react-dom": "^19.1.0"
+  }
+}

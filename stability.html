@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>stability prototype</title>
+    <style>
+      :root {
+        --color-bg: #fdfdfd;
+        --color-text: #1a1a1a;
+        --color-text-light: #4a4a4a;
+        --color-text-lighter: #8a8a8a;
+      }
+      body {
+        margin: 0;
+        background: var(--color-bg);
+        color: var(--color-text);
+        font-family: system-ui, sans-serif;
+        display: grid;
+        grid-template-columns: minmax(260px, 1fr) 2fr;
+        min-height: 100vh;
+      }
+      #root {
+        padding: 1.5rem;
+        border-right: 1px solid #e5e5e5;
+      }
+      #root section {
+        margin-top: 1rem;
+        padding: 1rem;
+        border: 1px solid #e5e5e5;
+        border-radius: 8px;
+      }
+      #root section.dark {
+        color: #fdfdfd;
+      }
+      #root input {
+        font: inherit;
+        padding: 0.3rem 0.5rem;
+        margin-right: 0.5rem;
+      }
+      #root button {
+        font: inherit;
+        padding: 0.3rem 0.7rem;
+      }
+      #root ul {
+        padding-left: 1.2rem;
+      }
+      #figure-wrap {
+        padding: 1.5rem;
+        overflow: auto;
+      }
+      #figure-head {
+        display: flex;
+        align-items: baseline;
+        gap: 0.75rem;
+        margin-bottom: 0.5rem;
+      }
+      #figure-head h4 {
+        margin: 0;
+        font-weight: 500;
+        color: var(--color-text-lighter);
+      }
+      #figure-head button {
+        font: inherit;
+        font-size: 12px;
+        padding: 0.1rem 0.5rem;
+      }
+      #figure svg {
+        font-family: monospace;
+        font-size: 13px;
+      }
+      #figure [data-thread] {
+        transition: opacity 0.15s;
+      }
+      #figure .thread-dim {
+        opacity: 0.12;
+      }
+      #figure .thread-hl {
+        opacity: 1;
+      }
+      #legend {
+        font-family: monospace;
+        font-size: 12px;
+        color: var(--color-text-lighter);
+      }
+      #legend .amber {
+        color: #e8a33d;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <div id="figure-wrap">
+      <div id="figure-head">
+        <h4>Values per render (measured)</h4>
+        <button id="reset">reset</button>
+        <button id="view">stack</button>
+      </div>
+      <div id="figure"></div>
+      <p id="legend">
+        &#9679; value &nbsp; &#9472; same reference &nbsp;
+        <span class="amber">&#215;</span> new identity &nbsp;
+        faded&nbsp;=&nbsp;no longer in memory &nbsp;
+        <span class="amber">flash</span>&nbsp;=&nbsp;redefined this render
+      </p>
+    </div>
+    <script type="module" src="/src/stability/main.tsx"></script>
+  </body>
+</html>
