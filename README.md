@@ -28,15 +28,46 @@ hang off `DemoApp` in the owner tree. Hover a node to see its prop names.
 
 ## Layout
 
-- `src/extract.ts` — bippy instrumentation, fiber → `InputNode` walker
-- `src/render-trees.ts` — `InputNode` → indented SVG (parent + owner views)
-- `src/demo/` — demo app the tool observes
+The library lives in `src/lib/` and publishes as `@julesblom/react-trees`
+with three entry points, isolated so diagram generation never requires
+bippy:
+
+- `@julesblom/react-trees/core` — `InputNode` type + `createTreeRenderer`
+  (InputNode → indented SVG, parent + owner views). Zero dependencies.
+- `@julesblom/react-trees/static` — `elementToTree`, a bippy-free static
+  element walker (calls component functions with a mock hooks dispatcher;
+  works at SSG time and in production builds). Peer: react.
+- `@julesblom/react-trees/extract` — `startExtraction`, the bippy
+  instrumentation (fiber → `InputNode` per commit). Peers: bippy, react.
+  Must be imported before react-dom so bippy can install the DevTools
+  hook.
+
+The renderer is a factory: `createTreeRenderer(options)` holds all
+interactive state (active areas, selection, folds, collapses, marks) per
+instance, so several diagrams on one page never share toggles. Options
+pick the feature set: `select`, `sourceNav`, `collapse`, `hooks`,
+`serverRegions`, `sizing` (`"content"` figures vs `"fixed"` live tool),
+`serverColor`, and an injected `contextName` resolver (each producer keeps
+its own context-name registry).
+
+App code around the library: `src/main.tsx` (dev app), `src/auto.ts`
+(script-tag IIFE), `src/demo/` (demo app the tool observes).
+
+Builds: `npm run build:lib` (tsup → `dist/*.js` + d.ts), `npm run
+build:auto` (→ `dist/auto.global.js`), `npm run build` (demo app →
+`dist-app/`).
+
+Unpublished (alpha): consumers install a tarball from `npm pack`
+committed into their repo (`file:./vendor/...tgz`). Bump the patch
+version on every repack — npm caches file: tarballs by name+version, so
+a same-version repack installs stale.
 
 ## Server components (RSC)
 
 In React 19 dev builds, server components reach the client as
 `fiber._debugInfo` chains (they never become fibers). The walker synthesizes
-rows for them (`s`-prefixed ids, orange dots), draws a translucent amber
+rows for them (`s`-prefixed ids; filled circle and italic name in the server color —
+the ghost-row grammar from the notation post), draws a translucent
 region behind contiguous server rows (the ContextRect convention from the
 parent-owners-context post), and tags client components whose owner is a
 server component with an italic `'use client'` badge — those are the boundary
@@ -44,21 +75,6 @@ entries. `fixtures/next-rsc/` is a minimal Next.js app exercising the
 interleaving case: server components slotted through a client boundary, where
 parent-tree regions are ragged but the owner tree recovers the slot structure
 (`Page` owns `ClientFrame`, `ServerStats`, `ServerList` directly).
-
-The panel's depth button splits the tree across two sheets: server rows
-stay on a back "server · early" sheet, client rows come forward onto a
-translucent "client · late" sheet offset down-right (nearer = later, the
-same depth-means-time convention as the stability figure's cube). It is
-one tree, not two — every row keeps its position, so the parent tree
-visibly ping-pongs between sheets at the interleaving points, while the
-owner tree splits clean: server components form a connected crown at the
-root and each 'use client' boundary roots a purely-client subtree.
-A crossing edge keeps its elbow in the parent's world, ending at a hollow
-ghost marking where the child appears in that world's output — on the back
-sheet a deferred client reference (not yet executed), on the front sheet a
-server component's slotted output. Amber arrows hop the boundary ghosts
-forward, always early-to-late. The whole layout is a lerp driven by one
-scalar; owner arcs and the flat amber regions fade out as depth fades in.
 
 The "app only" checkbox scopes both views to the RSC program the app
 author wrote: server components plus everything they transitively own
@@ -206,5 +222,5 @@ the commit event instead.
   `[ ]×n` for lists) — the fade-in-place version ships as selection focus
 - prop strand counts on owner edges; pass-through highlighting via reference
   equality across fiber levels
-- package react-scan-style: npm + `auto.global.js` IIFE that attaches an
-  overlay panel to any dev app
+- publish to npm (the package structure and the `auto.global.js` IIFE
+  exist; still consumed as a local tarball while alpha)

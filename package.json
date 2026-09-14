@@ -1,23 +1,39 @@
 {
   "name": "@julesblom/react-trees",
   "private": true,
-  "version": "0.1.0",
+  "version": "0.1.2",
   "type": "module",
   "files": [
     "dist"
   ],
+  "typesVersions": {
+    "*": {
+      "core": [
+        "dist/core.d.ts"
+      ],
+      "static": [
+        "dist/static.d.ts"
+      ],
+      "extract": [
+        "dist/extract.d.ts"
+      ]
+    }
+  },
   "exports": {
     "./core": {
       "types": "./dist/core.d.ts",
-      "import": "./dist/core.js"
+      "import": "./dist/core.js",
+      "default": "./dist/core.js"
     },
     "./static": {
       "types": "./dist/static.d.ts",
-      "import": "./dist/static.js"
+      "import": "./dist/static.js",
+      "default": "./dist/static.js"
     },
     "./extract": {
       "types": "./dist/extract.d.ts",
-      "import": "./dist/extract.js"
+      "import": "./dist/extract.js",
+      "default": "./dist/extract.js"
     }
   },
   "scripts": {
