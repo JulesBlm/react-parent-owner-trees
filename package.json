@@ -14,7 +14,14 @@
   ],
   "author": "Jules Blom",
   "license": "MIT",
-  "homepage": "https://julesblom.com/react-trees",
+  "homepage": "https://github.com/JulesBlm/react-parent-owner-trees#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/JulesBlm/react-parent-owner-trees.git"
+  },
+  "bugs": {
+    "url": "https://github.com/JulesBlm/react-parent-owner-trees/issues"
+  },
   "type": "module",
   "files": [
     "dist"

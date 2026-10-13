@@ -123,6 +123,28 @@ export function applyView(
 export const hideDom = (n: InputNode): boolean => Boolean(n.dom);
 export const hideStructural = (n: InputNode): boolean => Boolean(n.structural);
 
+// --- Subtree scope --------------------------------------------------------
+// Narrow the view to one node's parent subtree — the large-app move: render
+// the region you're working on, not the whole app. A scope is a view, like
+// applyView: the full tree stays the source of truth, re-applied per commit.
+// When the id is absent (the scoped component unmounted, or never existed)
+// the scope dissolves to the full tree rather than blanking a live panel.
+// Owner refs are not rewritten: owners outside the scope become owner-tree
+// roots via rebuildByOwner's ids guard, and arcs to them drop through the
+// composer's byId tolerance — "their owner isn't in view" rendered honestly.
+export function scopeToSubtree(roots: InputNode[], id: string): InputNode[] {
+  function find(nodes: InputNode[]): InputNode | null {
+    for (const node of nodes) {
+      if (node.id === id) return node;
+      const hit = node.children && find(node.children);
+      if (hit) return hit;
+    }
+    return null;
+  }
+  const hit = find(roots);
+  return hit ? [hit] : roots;
+}
+
 // Declared fallbacks are boundary facts, not tree structure: rows and
 // elbows claim "this exists here", which a not-mounted fallback does
 // not. Potential branches are pulled out of the row flow entirely and

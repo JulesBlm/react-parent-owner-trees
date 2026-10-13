@@ -15,10 +15,7 @@ where props come from, what a boundary scopes — so reading it from code
 means reconstructing it in working memory. A picture can hold it for you.
 The post draws that picture by hand; this library draws it from your app.
 
-Think [react-scan](https://github.com/aidenybai/react-scan), but instead of
-highlighting re-renders it shows the whole app as the two trees. Built on
-[bippy](https://github.com/aidenybai/bippy), the fiber-access layer
-extracted from react-scan.
+Built on [bippy](https://github.com/aidenybai/bippy) for fiber access.
 
 ![The demo app drawn as its two trees, side by side: the parent tree with dashed owner arcs sweeping back to DemoApp, and the flat owner tree next to it](docs/images/hero-trees.png)
 
@@ -31,7 +28,17 @@ Live extraction needs a **development build of React 19** — production
 builds strip owner information. The static walker (below) also works in
 production builds and at build time.
 
+> [!NOTE]
+> **Alpha.** This is an early release. The API may change between 0.x
+> versions, and live extraction has not been stress-tested on large apps
+> yet. [Issues and reports are
+> welcome](https://github.com/JulesBlm/react-parent-owner-trees/issues).
+
 ## Install
+
+Requires **React 19** (the `react` peer range is `>=19 <20`). Live
+extraction additionally needs a development build of React; the static
+walker also works with production React.
 
 ```sh
 npm install react-parent-owner-trees bippy
@@ -97,6 +104,32 @@ Observable-minimap sense. It's per-call data, not renderer state: pass it
 only on commit-triggered renders, so your own interaction re-renders
 don't replay the blink. The renderer turns it all into SVG strings; you
 put them in the DOM.
+
+### Page highlighting
+
+The extract entry also ships the selection's second surface: while a row
+is focused, outline the DOM region its output governs in the running app.
+`getNodeHostElements(id)` resolves a row to the elements behind it (the
+nearest host descendants for a component, the node itself for a host row;
+empty for rows with nothing on the page), and `createPageHighlighter()`
+draws — quiet fixed-position outlines that never affect page layout and
+track scroll and resize. Re-resolve after every render so commits that
+remount elements keep the outline honest:
+
+```ts
+import {
+  createPageHighlighter,
+  getNodeHostElements,
+} from "react-parent-owner-trees/extract";
+
+const highlighter = createPageHighlighter();
+
+function render() {
+  // ... innerHTML = renderer.parentTreeSvg(...) etc ...
+  const selected = renderer.selectedId();
+  highlighter.highlight(selected ? getNodeHostElements(selected) : []);
+}
+```
 
 ### Import order
 
@@ -171,8 +204,28 @@ renderer method, then re-render both trees.
 | `data-hooks-toggle` | `toggleHooks(id)` |
 
 There are also direct setters — `setArcStyle`, `setHooksMode`, `setMarks`,
-`clearSelect`, and `set*Active` variants of the toggles. See the
-`TreeRenderer` type for the full interface.
+`setView` (hide DOM rows or structural rows), `clearSelect`, and
+`set*Active` variants of the toggles. See the `TreeRenderer` type for the
+full interface.
+
+The core entry also exports small helpers for working with trees outside
+the renderer: `scopeToSubtree` (narrow the view to one node's subtree —
+for a large app, render the region you're working on instead of the whole
+tree), `applyView`/`hideDom`/`hideStructural` (filter a tree the same way
+`setView` does), `diffSnapshots` (the `TreeDiff` between two snapshots),
+and `serializeTree`. Apply them between the extraction callback and the
+SVG methods:
+
+```ts
+startExtraction((roots, diff, rendered) => {
+  const view = scopeToSubtree(roots, scopedId);
+  parentEl.innerHTML = renderer.parentTreeSvg(view, rendered);
+  ownerEl.innerHTML = renderer.ownerTreeSvg(view, rendered);
+});
+```
+
+If the scoped id disappears (the component unmounted), the scope dissolves
+to the full tree instead of blanking the panel.
 
 ## What the diagrams show
 

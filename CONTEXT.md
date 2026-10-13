@@ -50,6 +50,14 @@ _Avoid_: collapse
 User-driven hiding of a node's subtree (`▸ n` badge carries the way back in).
 _Avoid_: fold
 
+**Subtree scope**:
+Narrowing the whole view to one node's parent subtree — the large-app move:
+render the region you're working on, not the app. A view, not an edit:
+reapplied over the full tree each commit, dissolving back to the full tree
+when the node is gone. Distinct from an Area's scope (what a provider or
+boundary governs).
+_Avoid_: zoom, drill-down
+
 **Mark**:
 One of the stageable glyph families (arcs, ids, state dots, memo, markers,
 nudge) a figure can render with or without, so glossary figures introduce
@@ -71,6 +79,14 @@ drawn — actual renders, never bailed-out reconciliation visits. Ambient
 liveness, pitched for peripheral vision; replays on commits only, never on
 interaction re-renders.
 _Avoid_: flash, highlight-updates
+
+**Page highlight**:
+The selected row's claim made literal: while a row is focused, the DOM
+region its output governs is outlined in the running app. Follows the
+selection, re-resolves on every commit, never moves the page; rows with
+nothing on the page (ghosts, departed, hidden subtrees) honestly outline
+nothing.
+_Avoid_: inspect, DOM highlight
 
 ## Server components
 

@@ -13,7 +13,8 @@ Sources:
 - [Minimap](https://observablehq.com/@observablehq/minimap)
 - [Forum: Visual Dataflow](https://talk.observablehq.com/t/visual-dataflow/2976)
 
-Status: the **blink** (ambient per-commit liveness) shipped from this list.
+Status: the **blink** (ambient per-commit liveness) and **page
+highlighting** (the second coordinated surface) shipped from this list.
 Everything else is unscheduled — ideas to think about, not a backlog.
 
 ## The deepest alignment
@@ -166,6 +167,30 @@ dual reading — simultaneously "who rendered whom" and the causal order of a
 commit. Possibly worth a line in CONTEXT.md or a glossary figure framing:
 the owner tree is the commit's render schedule.
 
+## Shipped: page highlighting
+
+The feature everyone remembers about Visual Dataflow is the minimap, but
+what made it work was the pair: references got a blue underline **in the
+code editor itself**, and the minimap wire plugged in as you typed. The
+lesson isn't "add an overview widget" — it's that the notation reached into
+the user's own artifact, so the abstract view and the thing being described
+confirmed each other.
+
+The analog shipped 2026-10-13: while a row is selected, the DOM region its
+output governs is outlined in the running app (`createPageHighlighter` +
+`getNodeHostElements`, both on the extract entry). The parent tree's whole
+claim is "where each node's output sits in the markup"; the outline lets a
+row prove that claim by pointing at its pixels. Restraint rules carried
+over: selection-triggered only (no hover-spray), one quiet color
+(Observable's own wire blue, `#3b5fc0`, as a nod), fixed-position boxes
+that never affect page layout, re-resolved every commit so remounts stay
+tracked. Rows with nothing on the page — ghosts, departed, hidden Activity
+subtrees — honestly outline nothing. See **Page highlight** in CONTEXT.md.
+
+The loop's other half already existed (cmd-click row → source file); a
+possible third arc is the reverse direction — alt-hover an element in the
+page to flash its row — which is unbuilt and should stay quiet if built.
+
 ## Shipped: the blink
 
 Minimap dots pulse subtly each time a cell runs; the editor margin flashes
@@ -188,8 +213,9 @@ Small failures from their feedback thread worth pre-empting:
   underline. When a mark is everywhere, it must whisper — the salience rule
   applied to someone else's regret.
 - **No obvious exit from dependency-viewing mode.** Selection focus needs
-  unmistakable ways out — click-away, Esc, re-click the focused row —
-  ideally all three. (Esc and re-click exist today; click-away doesn't.)
+  unmistakable ways out — click-away, Esc, re-click the focused row. (All
+  three exist as of 2026-10-13; click-away exempts form controls, and a
+  click-away with nothing selected is a true no-op — no re-render.)
 - **One click, one effect.** Clicking a cell name both navigated *and*
   force-expanded the code editor, which annoyed people. Focus and collapse
   must never share a gesture ambiguously.

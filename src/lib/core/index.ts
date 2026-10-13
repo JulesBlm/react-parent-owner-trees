@@ -19,6 +19,9 @@ export { createTreeRenderer } from "./renderer";
 // named-vs-anonymous idea): hosts composing their own predicates ("app
 // only" later) need the splice and the canonical species to build from.
 export { applyView, hideDom, hideStructural } from "./transform";
+// A scope is a view narrowed to one subtree (the large-app move); hosts
+// apply it per commit, before any other view, and own the picking gesture.
+export { scopeToSubtree } from "./transform";
 // The corpus format (ADR-0007): producers' golden tests and user debugging
 // both read trees as this text, so it is interface, not seam.
 export { serializeTree } from "./serialize";
