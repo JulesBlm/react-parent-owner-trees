@@ -59,7 +59,9 @@ The standalone build attaches a tree panel to any dev-mode React app. Serve
 ```
 
 It adds a fixed panel with both trees, updated on every commit, plus a
-`hide` button and a badge to bring the panel back. The script must load
+`hide` button and a badge to bring the panel back. On a large app, scope
+the view down: select a row, click `scope to`, and both trees narrow to
+that subtree — a breadcrumb in the header zooms back out. The script must load
 first so bippy can install the React DevTools hook before react-dom
 initializes.
 
