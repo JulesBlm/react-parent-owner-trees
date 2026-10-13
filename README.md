@@ -1,226 +1,232 @@
-# react-trees-tool
+# react-parent-owner-trees
 
-Prototype: live parent tree and owner tree diagrams of a running React app,
-in the visual language of the julesblom.com parents/owners series. Think
-react-scan, but instead of highlighting re-renders it shows the app as the
-two trees.
+Live diagrams of a running React app, in the notation from [A Visual
+Notation for React's Parent and Owner
+Trees](https://julesblom.com/writing/react-visual-notation). The library
+draws two SVG trees:
 
-Built on [bippy](https://github.com/aidenybai/bippy) (the fiber-access layer
-extracted from react-scan). On every commit, the fiber tree is walked into a
-diagrama-style `InputNode` structure (nesting = parent tree, `_debugOwner`
-refs = owner tree, `memoizedProps` keys = prop names) and rendered as
-indented SVG trees: filled circles for components, hollow for DOM nodes,
-solid elbows for tree structure, dashed arcs for owner edges in the parent
-tree.
+- **Parent tree** — where each component's output lands in the markup.
+- **Owner tree** — which component rendered which. An element's owner is
+  the component whose JSX created it, so owner edges show where props come
+  from.
 
-Development builds of React only; owner info is stripped in production.
+None of this structure lives in a single file — which component owns which,
+where props come from, what a boundary scopes — so reading it from code
+means reconstructing it in working memory. A picture can hold it for you.
+The post draws that picture by hand; this library draws it from your app.
 
-## Run
+Think [react-scan](https://github.com/aidenybai/react-scan), but instead of
+highlighting re-renders it shows the whole app as the two trees. Built on
+[bippy](https://github.com/aidenybai/bippy), the fiber-access layer
+extracted from react-scan.
 
+![The demo app drawn as its two trees, side by side: the parent tree with dashed owner arcs sweeping back to DemoApp, and the flat owner tree next to it](docs/images/hero-trees.png)
+
+*The demo app as its two trees. In the parent tree, `Stats` and the
+`Post`s sit inside `Frame`'s markup, but the dashed arcs show `DemoApp`
+owns them — and the owner tree on the right makes that the structure:
+slot composition, exactly where the two trees diverge.*
+
+Live extraction needs a **development build of React 19** — production
+builds strip owner information. The static walker (below) also works in
+production builds and at build time.
+
+## Install
+
+```sh
+npm install react-parent-owner-trees bippy
 ```
+
+`bippy` is an optional peer dependency: only the `/extract` entry needs it.
+If you only render diagrams from your own data, or only use the static
+walker, skip it.
+
+## Quick start: script tag
+
+The standalone build attaches a tree panel to any dev-mode React app. Serve
+`dist/auto.global.js` from your page and load it as a **classic script in
+`<head>`, before your app bundle**:
+
+```html
+<script src="/auto.global.js"></script>
+```
+
+It adds a fixed panel with both trees, updated on every commit, plus a
+`hide` button and a badge to bring the panel back. The script must load
+first so bippy can install the React DevTools hook before react-dom
+initializes.
+
+## Quick start: in your own page
+
+The package has three entry points:
+
+| Entry | What it gives you | Dependencies |
+| --- | --- | --- |
+| `react-parent-owner-trees/core` | `createTreeRenderer` and the `InputNode` type | none |
+| `react-parent-owner-trees/extract` | `startExtraction` — live fiber extraction, one tree per commit | bippy, react (dev build) |
+| `react-parent-owner-trees/static` | `elementToTree` — element walker, no DOM needed | react |
+
+Wire extract to core like this:
+
+```ts
+// Import order matters: extract must be imported before react-dom,
+// anywhere in your module graph. See "Import order" below.
+import { startExtraction, contextName } from "react-parent-owner-trees/extract";
+import { createTreeRenderer } from "react-parent-owner-trees/core";
+
+const renderer = createTreeRenderer({ sizing: "fixed", contextName });
+
+startExtraction((roots, diff, rendered) => {
+  document.getElementById("parent")!.innerHTML = renderer.parentTreeSvg(
+    roots,
+    rendered,
+  );
+  document.getElementById("owner")!.innerHTML = renderer.ownerTreeSvg(
+    roots,
+    rendered,
+  );
+});
+```
+
+`startExtraction` calls you back on every React commit with an
+`InputNode[]`, a `TreeDiff` against the previous snapshot, and the set of
+node ids that actually performed work in the commit (bailed-out
+reconciliation visits don't count). Pass that set to the SVG methods and
+the rows that rendered blink once, subtly — ambient liveness in the
+Observable-minimap sense. It's per-call data, not renderer state: pass it
+only on commit-triggered renders, so your own interaction re-renders
+don't replay the blink. The renderer turns it all into SVG strings; you
+put them in the DOM.
+
+### Import order
+
+bippy installs the React DevTools hook as a side effect of being imported.
+React checks for that hook exactly once, when react-dom first evaluates —
+if the hook is not there yet, extraction stays silent forever. So the
+`/extract` entry (or the script tag) must load before anything that imports
+react-dom:
+
+```ts
+import "react-parent-owner-trees/extract"; // first
+import { createRoot } from "react-dom/client"; // after
+```
+
+If the order is wrong, `startExtraction()` logs a `console.error`
+explaining the problem after a short grace period.
+
+## Static figures
+
+`elementToTree` walks a React element tree without rendering it to the DOM.
+It calls your component functions with a mock hooks dispatcher, so it works
+at build time, in tests, and with production React:
+
+```tsx
+import { elementToTree, contextName } from "react-parent-owner-trees/static";
+import { createTreeRenderer } from "react-parent-owner-trees/core";
+
+const roots = elementToTree(<App />);
+const renderer = createTreeRenderer({ sizing: "content", contextName });
+const svg = renderer.parentTreeSvg(roots);
+```
+
+Options: `elementToTree(root, prefix, { rsc, suspended, errored })`.
+`rsc` treats the tree as a server-component program (mark client entry
+points with `markUseClient`), `suspended` draws every Suspense boundary
+showing its fallback, and `errored` forces every error boundary into its
+caught state. Useful for drawing figures of states that are hard to catch
+live.
+
+## Renderer options
+
+`createTreeRenderer(options)` returns a renderer instance that owns all
+interactive state (selection, folds, active areas), so several diagrams on
+one page never share toggles.
+
+| Option | Default | Meaning |
+| --- | --- | --- |
+| `sizing` | `"content"` | `"content"` sizes the SVG to the widest row (figures); `"fixed"` keeps a stable width (live tool, where rows churn every commit) |
+| `select` | on | click a node to focus its neighborhood; click again or press Escape to clear |
+| `collapse` | off | disclosure triangles and double-click subtree collapse |
+| `hooks` | off | per-component hook strips, one glyph per hook call |
+| `serverRegions` | off | tinted regions behind server-component rows |
+| `sourceNav` | off | `data-node` attributes and a cmd-click source hint |
+| `serverColor` | a teal (`hsl(191 65% 40%)`) | the "came from the server" color |
+| `contextName` | — | resolves a context id to a display name; pass the `contextName` export of whichever producer you use |
+
+## Interaction
+
+The renderer returns plain SVG strings and never touches the DOM.
+Interactivity is wired by you: listen for clicks on your container, find
+the closest element with one of these data attributes, call the matching
+renderer method, then re-render both trees.
+
+| Data attribute | Renderer method |
+| --- | --- |
+| `data-select-toggle` | `toggleSelect(id)` |
+| `data-fold-toggle` | `toggleFold(id)` |
+| `data-collapse-toggle` | `toggleCollapse(id)` |
+| `data-context-toggle` | `toggleContext(id)` |
+| `data-boundary-toggle` | `toggleBoundary(id)` |
+| `data-memo-toggle` | `toggleMemo(id)` |
+| `data-hooks-toggle` | `toggleHooks(id)` |
+
+There are also direct setters — `setArcStyle`, `setHooksMode`, `setMarks`,
+`clearSelect`, and `set*Active` variants of the toggles. See the
+`TreeRenderer` type for the full interface.
+
+## What the diagrams show
+
+- **Circles** — filled for components, hollow for DOM nodes. Solid elbows
+  are parent structure; dashed arcs are owner edges, pointing back to where
+  the props come from.
+- **State dots** — small red dots above a component, one per
+  useState/useReducer.
+- **Memo discs** — `React.memo` components sit in a violet disc; owner
+  arcs end at the disc, because props are delivered to the comparison gate.
+  Click the disc to see the memoized props the next comparison runs
+  against.
+
+  ![Stats in a violet memo disc with its retained props shown inline: count 0, label "clicks"](docs/images/memo-gate.png)
+- **Context providers** — colored rows (the context needs a
+  `displayName`). Click one to tint its scope, show its current value, and
+  draw delivery lines to every component that reads it.
+
+  ![ThemeContext's area: a tinted rect over the provider's subtree, the current value "light" as a dot at the right edge, and delivery lines into Stats and both Posts](docs/images/context-area.png)
+- **Suspense and error boundaries** — colored rings. Click one to tint
+  exactly the region it catches (its subtree minus nested boundaries of
+  the same kind). Suspended boundaries get a `suspended` badge; subtrees
+  unmounted by a crash are drawn dashed as what stood there before.
+- **Server components (RSC)** — React 19 server components appear as
+  italic rows in the server color, with regions behind contiguous server
+  rows and `'use client'` badges on the client entry points.
+- **`<Activity>`, `<Profiler>`, portals, `React.lazy`, Fragment,
+  StrictMode** — all get rows with their own marks; hidden `<Activity>`
+  subtrees render dimmed.
+- **Folding** — runs of four or more same-named siblings fold into one row
+  with a `×n` badge; click to unfold.
+- **Selection focus** — click any node to keep its neighborhood (two
+  levels up and down, plus its direct owner and ownees) at full strength
+  while everything else fades in place; layout never shifts.
+
+## Known limitations
+
+- Live extraction works only with development builds of React 19.
+- If a selected node's owner sits inside a folded run, that owner arc is
+  not drawn (unfolding on selection is planned).
+
+## Development
+
+```sh
 npm install
-npm run dev
+npm run dev     # demo app + live tool
+npm test        # renderer snapshots + unit tests
+npm run build:lib && npm run build:auto
 ```
 
-The demo app (left) uses slot composition so the two trees visibly differ:
-`Stats` and the `Post`s sit inside `Frame`'s markup in the parent tree but
-hang off `DemoApp` in the owner tree. Hover a node to see its prop names.
+The library lives in `src/lib/`; `src/main.tsx` and `src/demo/` are the
+dev app the tool observes. Design decisions are recorded in `docs/adr/`,
+the domain vocabulary in `CONTEXT.md`.
 
-## Layout
+## License
 
-The library lives in `src/lib/` and publishes as `@julesblom/react-trees`
-with three entry points, isolated so diagram generation never requires
-bippy:
-
-- `@julesblom/react-trees/core` — `InputNode` type + `createTreeRenderer`
-  (InputNode → indented SVG, parent + owner views). Zero dependencies.
-- `@julesblom/react-trees/static` — `elementToTree`, a bippy-free static
-  element walker (calls component functions with a mock hooks dispatcher;
-  works at SSG time and in production builds). Peer: react.
-- `@julesblom/react-trees/extract` — `startExtraction`, the bippy
-  instrumentation (fiber → `InputNode` per commit). Peers: bippy, react.
-  Must be imported before react-dom so bippy can install the DevTools
-  hook.
-
-The renderer is a factory: `createTreeRenderer(options)` holds all
-interactive state (active areas, selection, folds, collapses, marks) per
-instance, so several diagrams on one page never share toggles. Options
-pick the feature set: `select`, `sourceNav`, `collapse`, `hooks`,
-`serverRegions`, `sizing` (`"content"` figures vs `"fixed"` live tool),
-`serverColor`, and an injected `contextName` resolver (each producer keeps
-its own context-name registry).
-
-App code around the library: `src/main.tsx` (dev app), `src/auto.ts`
-(script-tag IIFE), `src/demo/` (demo app the tool observes).
-
-Builds: `npm run build:lib` (tsup → `dist/*.js` + d.ts), `npm run
-build:auto` (→ `dist/auto.global.js`), `npm run build` (demo app →
-`dist-app/`).
-
-Unpublished (alpha): consumers install a tarball from `npm pack`
-committed into their repo (`file:./vendor/...tgz`). Bump the patch
-version on every repack — npm caches file: tarballs by name+version, so
-a same-version repack installs stale.
-
-## Server components (RSC)
-
-In React 19 dev builds, server components reach the client as
-`fiber._debugInfo` chains (they never become fibers). The walker synthesizes
-rows for them (`s`-prefixed ids; filled circle and italic name in the server color —
-the ghost-row grammar from the notation post), draws a translucent
-region behind contiguous server rows (the ContextRect convention from the
-parent-owners-context post), and tags client components whose owner is a
-server component with an italic `'use client'` badge — those are the boundary
-entries. `fixtures/next-rsc/` is a minimal Next.js app exercising the
-interleaving case: server components slotted through a client boundary, where
-parent-tree regions are ragged but the owner tree recovers the slot structure
-(`Page` owns `ClientFrame`, `ServerStats`, `ServerList` directly).
-
-The "app only" checkbox scopes both views to the RSC program the app
-author wrote: server components plus everything they transitively own
-(via owner refs). Framework wrapper components — routers, error and
-segment bookkeeping — belong to a different program and drop out, with
-kept rows hoisting to their nearest kept ancestor. No-op on pages with
-no server rows.
-
-## State dots and React.memo
-
-Components holding state hooks get small red dots stacked above their
-circle, one per useState/useReducer (capped at three; the hover title has
-the true count, and class component state counts once). React.memo
-components sit inside a filled violet disc — containment, not adornment:
-memo wraps the component, and the fiber tree agrees (the memo component
-is its own fiber), so the shell is runtime structure, not a metaphor.
-Owner arcs terminate on the disc rather than at the node: props are
-delivered to the comparison gate,
-and the function only runs if they changed. Click the ring to show the
-fiber's memoizedProps inline, the snapshot the next shallow comparison
-runs against; it tracks the live fiber across commits.
-
-## Context areas
-
-Context providers appear as rows (colored name, ring circle) when their
-context has a `displayName` — the one runtime signal separating deliberate
-user contexts from the anonymous provider stacks libraries wrap everything
-in. Set `MyContext.displayName = "MyContext"` to surface yours. Click a
-provider row to toggle its area: a tinted rect over the provider's parent
-subtree (scope: everything that *can* consume), with the context's current
-value as a filled dot at the area's right edge on the provider's row
-(labeled with a preview of `memoizedProps.value`), and a delivery line
-from the value into each fiber that actually reads it via useContext
-(detected from `fiber.dependencies`), ending at the consumer's name — the
-published parent-owners-context convention. Areas draw in the parent tree
-only, since context scope propagates through the parent tree.
-
-## Suspense and error boundaries
-
-Boundary rows get a colored ring and clickable name (teal Suspense, red
-error boundaries — class fibers with getDerivedStateFromError or
-componentDidCatch). Clicking one tints its EXCLUSIVE catch region: its
-subtree minus the subtrees of nested boundaries of the same kind, so the
-tint is exactly the set of components for which that boundary is the
-closest one. A nested boundary's own row stays in the outer region, since
-a boundary can't catch its own render. Suspense rows showing their
-fallback get a `suspended` badge. Parent tree only: throws and suspensions
-climb the return path.
-
-Profiler rows are clickable the same way (slate ring, id shown as a
-badge): their area is the subtree the profiler's onRender measures. Unlike
-catch regions this area is INCLUSIVE — nested Profilers all measure the
-same work, so nothing is subtracted. The same split gives the notation a
-clean rule: rows that scope something are clickable and have areas;
-Fragment and StrictMode don't.
-
-## Activity
-
-`<Activity>` boundaries appear as green clickable rows with a
-`hidden`/`visible` badge; clicking one tints its area — the subtree whose
-mounting Activity controls (inclusive, like Profiler: a nested Activity
-stays under the outer one's control), labelled with the current mode.
-Hidden subtrees render at 25% opacity — alive but dormant, which is
-Activity's whole pitch. Suspense's internal Offscreen fibers are excluded
-so no phantom Activity rows appear inside Suspense boundaries.
-
-## Structural fibers
-
-Fragment, StrictMode, and Profiler get rows too (hollow grey circle, italic
-grey name): no function of yours and no DOM node behind them, but React
-persists a fiber for each all the same. Renders are cheap and disposable,
-fibers are the memory — and the fiber tree holds more than one fiber per
-component call. In the owner tree a Fragment shows up as a leaf next to its
-children, since the component that rendered `<>...</>` owns the fragment
-element and its child elements alike.
-
-## Selection focus
-
-Click any node (circle or name) to focus its neighborhood, Observable-minimap
-style: the node, two parents up, two children down, plus its direct owner and
-ownees regardless of tree distance — the arc from an owner five rows away
-stays at full strength, which is the point. Everything else fades in place;
-layout never shifts. Owner arcs follow the same rule as rows: arcs touching the
-selection get a heavier stroke, arcs inside the neighborhood draw
-normally, and every other arc fades in place to the same strength as the
-faded rows — edges recede with the rows they connect, nothing changes
-shape on focus. (Whisker stubs and truncated-arc stubs were tried first
-and read as noise.) Click again or press Escape to
-clear. Selection applies to both trees at once, so the same component's
-spatial neighborhood (parent tree) and data-flow neighborhood (owner tree)
-sit side by side.
-
-Known limitations: if the selected node's owner sits inside a folded run it
-isn't among the rendered rows, so that arc silently disappears
-(auto-unfolding the run on selection is the planned fix). And hovering a node's dot now shows the click-to-focus hint
-rather than its prop names; props still show on name hover.
-
-## Stability prototype
-
-`stability.html` (`src/stability/`) is the workhorse-figure prototype for
-the stability post (see STABILITY.md): the post's running example
-(`SearchBox` → `ResultsList`) on the left, and a measured slice-columns
-figure on the right. A bippy observer snapshots tracked values per commit
-from the fiber side (hook chain for `setQuery`/`results`, child props for
-`style`/`onClear`), the figure draws renders as columns, values as rows,
-and a horizontal thread where `Object.is` says the reference survived.
-The sample component contains no instrumentation; the diagram is a
-measurement, not a script. Triggers are derived by diffing state between
-snapshots (mount / setQuery / setDark / parent).
-
-Interactions: values that got a new identity flash amber on each commit
-(SMIL, plays on DOM insertion, skipped under prefers-reduced-motion), and
-an amber × marks each break statically so screenshots keep the story.
-Values the current fiber no longer references fade (garbage). The memory
-shelf at the right edge shows what the fiber holds now, hooks compartment
-vs replaced-every-render compartment. Hover any dot to highlight its full
-identity thread; hover values for the actual reference (`<title>`).
-Reset remounts the demo and replays from render 1.
-
-The stack button tweens the figure into the durée cube: cards cascade
-into depth, newest in front, and since oblique projection is 2D affine
-the whole layout is a lerp of the flat and stacked positions driven by
-one scalar. Threads rotate into the depth axis for free (their endpoints
-move), so an unbroken identity reads as a skewer through the card stack;
-break marks float in the gaps between cards. SVG has no z-order, so
-stacking is DOM order: strict painter's order per depth (threads into a
-card, then its box, then its dots), with translucent card faces (0.75)
-so each layer hazes what's behind it instead of erasing it — deeper
-history is progressively dimmer, and the skewers stay traceable.
-Opaque faces were tried first and hid nearly everything, since the
-cascade step is smaller than a card.
-
-In the stacked view a commit plays as motion: the whole history train
-recedes one step toward the back, the new card arrives from the near
-side (fading in), and the snapshot that slid out of the window fades
-out past the back edge. Implemented as a fractional display index
-(d = k − 1 + (1 − enter)) so the slide is one motion of the whole
-train; the flat view keeps the instant redraw, where the flash carries
-the commit event instead.
-
-## Next
-
-- re-render flashes on nodes (marry react-scan's signal with the tree view)
-- collapse version of the focus view (breadcrumb spine, folded siblings,
-  `[ ]×n` for lists) — the fade-in-place version ships as selection focus
-- prop strand counts on owner edges; pass-through highlighting via reference
-  equality across fiber levels
-- publish to npm (the package structure and the `auto.global.js` IIFE
-  exist; still consumed as a local tarball while alpha)
+MIT

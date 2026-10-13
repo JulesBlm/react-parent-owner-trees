@@ -3,13 +3,25 @@ import {
   instrument,
   isCompositeFiber,
   isHostFiber,
+  isInstrumentationActive,
   getDisplayName,
+  getNearestHostFibers,
+  traverseRenderedFibers,
   type Fiber,
 } from "bippy";
 import { locateFromStack } from "./locate";
+import { describePortalTarget, markAll, previewValue } from "./core/producer";
+// Deep import, not the barrel: the extract entry must not drag the
+// renderer into its bundle (ADR-0001 keeps the entries separable).
+import { diffSnapshots, type TreeDiff } from "./core/diff";
 import type { InputNode } from "./core";
 
 export type { InputNode } from "./core";
+export type { TreeDiff } from "./core/diff";
+export { describePortalTarget } from "./core/producer";
+// The page-highlight overlay ships with the live tool: getNodeHostElements
+// resolves a row, createPageHighlighter draws.
+export { createPageHighlighter, type PageHighlighter } from "./highlight";
 
 const fiberIds = new WeakMap<Fiber, string>();
 let nextId = 1;
@@ -139,14 +151,6 @@ function structuralName(fiber: Fiber): string | null {
   }
 }
 
-// "body", "div#modal-root": enough to find the container, no more.
-export function describePortalTarget(container: unknown): string {
-  const el = container as { tagName?: string; id?: string } | null;
-  if (!el?.tagName) return "node";
-  const tag = el.tagName.toLowerCase();
-  return el.id ? `${tag}#${el.id}` : tag;
-}
-
 const REACT_VIEW_TRANSITION_TYPE = Symbol.for("react.view_transition");
 // The ViewTransition fiber (tag 30) carries the symbol on elementType;
 // its `type` is null.
@@ -164,6 +168,19 @@ function isActivityFiber(fiber: Fiber): boolean {
   if (fiber.tag !== OFFSCREEN_TAG) return false;
   const parentTag = fiber.return?.tag;
   return parentTag !== SUSPENSE_TAG && parentTag !== ACTIVITY_TAG;
+}
+
+// React sets DidCapture on a boundary fiber that is showing its fallback
+// (both error boundaries and Suspense use it; we only consult it on error
+// boundaries, where Suspense has the cleaner memoizedState signal).
+const DID_CAPTURE = 0b10000000;
+
+function didCapture(fiber: Fiber): boolean {
+  const flags =
+    (fiber as { flags?: number; effectTag?: number }).flags ??
+    (fiber as { effectTag?: number }).effectTag ??
+    0;
+  return (flags & DID_CAPTURE) !== 0;
 }
 
 function isErrorBoundary(fiber: Fiber): boolean {
@@ -196,18 +213,6 @@ function isMemoFiber(fiber: Fiber): boolean {
   const elementType = (fiber as { elementType?: { $$typeof?: symbol } })
     .elementType;
   return elementType?.$$typeof === REACT_MEMO_TYPE;
-}
-
-function previewValue(value: unknown): string {
-  if (typeof value === "function")
-    return `ƒ ${(value as { name?: string }).name || "anonymous"}`;
-  if (typeof value === "string")
-    return JSON.stringify(
-      value.length > 24 ? `${value.slice(0, 21)}…` : value,
-    );
-  if (Array.isArray(value)) return `Array(${value.length})`;
-  if (typeof value === "object" && value !== null) return "{…}";
-  return String(value);
 }
 
 function memoPropPreviews(fiber: Fiber): string[] {
@@ -253,6 +258,25 @@ export async function getNodeSource(id: string): Promise<string | null> {
   const stack = (fiberById.get(id) as { _debugStack?: Error } | undefined)
     ?._debugStack?.stack;
   return typeof stack === "string" ? locateFromStack(stack) : null;
+}
+
+// The DOM elements a row's output governs: the row's own node for a host
+// row, the nearest host descendants for a composite (what its render
+// materialized as). Empty for rows with nothing on the page — ghost rows,
+// departed/potential rows, structural fibers with no host output — which
+// is itself honest: selecting them highlights nothing because nothing of
+// theirs exists to highlight.
+export function getNodeHostElements(id: string): Element[] {
+  const fiber = fiberById.get(id);
+  if (!fiber) return [];
+  try {
+    return getNearestHostFibers(fiber)
+      .map((f) => f.stateNode as unknown)
+      .filter((n): n is Element => n instanceof Element);
+  } catch {
+    // A hostile fiber shape costs the highlight, never the tool.
+    return [];
+  }
 }
 
 // The hook-name array React maintains in dev to detect rules-of-hooks
@@ -315,6 +339,53 @@ function consumedContexts(fiber: Fiber): string[] | undefined {
 // serverRows maps a ReactComponentInfo object to its synthesized row for this
 // walk: sibling fibers produced by the same server component share the info
 // object by reference, so they nest under one shared server row.
+// ADR-0007: errors are local and visible. A fiber that resists extraction
+// (a hostile props proxy, an internals shape from a React version this
+// code hasn't met) becomes ONE placeholder row — the raw tag as its name,
+// honest about what it isn't — and the walk continues beneath it. Warned
+// once per fiber, not per commit — the tool runs at commit frequency.
+const warnedUnknown = new Set<string>();
+
+function placeholderRow(fiber: Fiber, error: unknown): InputNode {
+  const node: InputNode = {
+    name: `#${fiber.tag}`,
+    id: stableId(fiber),
+    unknown: true,
+  };
+  if (!warnedUnknown.has(node.id)) {
+    warnedUnknown.add(node.id);
+    console.warn(
+      `react-parent-owner-trees: extraction failed on a fiber (tag ${fiber.tag}); ` +
+        "rendering a placeholder row, subtree intact.",
+      error,
+    );
+  }
+  return node;
+}
+
+// Set by describeFiber during the walk, read once per snapshot: the error
+// ghost bookkeeping (a full index plus a splice walk per commit) is skipped
+// while the tree has no error boundary, so the common case pays nothing for
+// a feature that is inert.
+let sawErrorBoundary = false;
+
+// What one fiber contributes, with every hostile-data read behind it: the
+// extracted fields and the sanitized server-component chain the node nests
+// under. The walk itself (children, server-row nesting) lives in visitFiber
+// and reads nothing that can throw, so the degradation catch wraps
+// describeFiber ALONE and recovery never re-walks children — a re-walk
+// through the shared serverRows map would append them to rows the aborted
+// attempt already discarded: a silently dropped subtree, the exact thing
+// ADR-0007 forbids.
+interface FiberFacts {
+  // null: a pass-through fiber (HostText, anonymous providers, the root);
+  // its children attach to the nearest included ancestor.
+  node: InputNode | null;
+  chain: { info: object; id: string; name: string; owner?: string }[];
+}
+
+const NO_FACTS: FiberFacts = { node: null, chain: [] };
+
 function collectChildren(
   fiber: Fiber | null,
   out: InputNode[],
@@ -322,139 +393,305 @@ function collectChildren(
 ): void {
   let current = fiber;
   while (current) {
-    const provided = providerContext(current);
-    const providedName =
-      provided && typeof provided.displayName === "string"
-        ? provided.displayName
-        : null;
-    const suspense = current.tag === SUSPENSE_TAG;
-    const activity = isActivityFiber(current);
-    const viewTransition = isViewTransitionFiber(current);
-    const structural = structuralName(current);
-    const name = providedName
-      ? `${providedName}.Provider`
-      : suspense
-        ? "Suspense"
-        : activity
-          ? "Activity"
-          : viewTransition
-            ? "ViewTransition"
-            : (structural ?? fiberName(current));
-    if (name !== null) {
-      const node: InputNode = {
-        name,
-        id: stableId(current),
-        owner: ownerId(current),
-        dom: isHostFiber(current) || undefined,
-        props: propNames(current),
-        contexts: consumedContexts(current),
-        state: stateHookCount(current),
-        hooks: hookTypes(current),
-        children: [],
-      };
-      fiberById.set(node.id, current);
-      if (provided && providedName) {
-        node.contextProvider = contextId(provided);
-        contextNames.set(node.contextProvider, providedName);
-        const value = (current.memoizedProps as { value?: unknown } | null)
-          ?.value;
-        if (value !== undefined) node.contextValue = previewValue(value);
-      }
-      if (suspense) {
-        node.suspense = true;
-        if (current.memoizedState !== null) node.suspended = true;
-      }
-      if (activity) {
-        node.activity = true;
-        const mode = (current.memoizedProps as { mode?: string } | null)?.mode;
-        if (mode === "hidden") node.hidden = true;
-      }
-      if (viewTransition) {
-        node.viewTransition = true;
-        const vtName = (current.memoizedProps as { name?: unknown } | null)
-          ?.name;
-        if (typeof vtName === "string" && vtName !== "auto")
-          node.vtName = vtName;
-      }
-      if (structural) {
-        node.structural = true;
-        // A Fragment fiber's memoizedProps IS its children (array or single
-        // element), not a props object; Object.keys would emit junk.
-        if (current.tag === FRAGMENT_TAG) node.props = [];
-        if (current.tag === PROFILER_TAG) {
-          node.profiler = true;
-          const id = (current.memoizedProps as { id?: unknown } | null)?.id;
-          if (typeof id === "string") node.profilerId = id;
-        }
-        if (current.tag === PORTAL_TAG) {
-          node.portal = true;
-          node.portalTarget = describePortalTarget(
-            (current.stateNode as { containerInfo?: unknown } | null)
-              ?.containerInfo,
-          );
-          node.props = [];
-        }
-      }
-      if (isErrorBoundary(current)) node.errorBoundary = true;
-      if (isMemoFiber(current)) {
-        node.memo = true;
-        node.memoProps = memoPropPreviews(current);
-      }
-      if (isLazyFiber(current)) node.lazy = true;
-      const fiberOwner = (
-        current as { _debugOwner?: Fiber | ServerComponentInfo }
-      )._debugOwner;
-      if (
-        isCompositeFiber(current) &&
-        fiberOwner &&
-        isServerInfo(fiberOwner)
-      ) {
-        node.boundary = true;
-      }
-      collectChildren(current.child, node.children!, serverRows);
-      if (node.children!.length === 0) delete node.children;
-      // A HostPortal fiber carries no _debugOwner, but its children do,
-      // and they share the portal call's creator; borrow it so the portal
-      // row stays attached in the owner tree instead of floating as a
-      // root.
-      if (node.portal && !node.owner) node.owner = node.children?.[0]?.owner;
-
-      // Nest this fiber under its chain of synthesized server rows.
-      let target = out;
-      for (const info of debugInfoChain(current)) {
-        let row = serverRows.get(info);
-        if (!row) {
-          const infoOwner = info.owner;
-          row = {
-            name: cleanName(info.name ?? "ServerComponent"),
-            id: serverInfoId(info),
-            owner:
-              infoOwner && isServerInfo(infoOwner)
-                ? serverInfoId(infoOwner)
-                : undefined,
-            server: true,
-            props: [],
-            children: [],
-          };
-          serverRows.set(info, row);
-          target.push(row);
-        }
-        target = row.children!;
-      }
-      target.push(node);
-    } else {
-      collectChildren(current.child, out, serverRows);
+    try {
+      visitFiber(current, out, serverRows);
+    } catch (error) {
+      // Unreachable in principle — every hostile read lives inside
+      // describeFiber's own catch — but a walk-machinery surprise still
+      // costs one row, not the commit. No child re-walk here either.
+      out.push(placeholderRow(current, error));
     }
     current = current.sibling;
   }
 }
 
-export function startExtraction(onTree: (roots: InputNode[]) => void): void {
+function visitFiber(
+  current: Fiber,
+  out: InputNode[],
+  serverRows: Map<object, InputNode>,
+): void {
+  let facts: FiberFacts;
+  try {
+    facts = describeFiber(current);
+  } catch (error) {
+    facts = { node: placeholderRow(current, error), chain: [] };
+  }
+  const node = facts.node;
+  if (node === null) {
+    collectChildren(current.child, out, serverRows);
+    return;
+  }
+  fiberById.set(node.id, current);
+  const kids: InputNode[] = [];
+  // A suspended boundary holds both subtrees: the primary children live on
+  // as a hidden Offscreen fiber (state preserved), the fallback mounts as
+  // its sibling. Tag the primary branch dormant so it dims instead of
+  // rendering undifferentiated next to the fallback. Falls back to the
+  // generic walk if the fiber shape isn't the expected
+  // Offscreen-plus-sibling.
+  if (node.suspended && current.child && current.child.tag === OFFSCREEN_TAG) {
+    const offscreen = current.child;
+    const primary: InputNode[] = [];
+    collectChildren(offscreen.child, primary, serverRows);
+    kids.push(...markAll(primary, "dormant"));
+    if (offscreen.sibling) {
+      const fallback: InputNode[] = [];
+      collectChildren(offscreen.sibling, fallback, serverRows);
+      for (const branch of fallback) branch.fallbackOf = node.id;
+      kids.push(...fallback);
+    }
+  } else {
+    collectChildren(current.child, kids, serverRows);
+  }
+  if (kids.length > 0) node.children = kids;
+  // A HostPortal fiber carries no _debugOwner, but its children do, and
+  // they share the portal call's creator; borrow it so the portal row
+  // stays attached in the owner tree instead of floating as a root.
+  if (node.portal && !node.owner) node.owner = kids[0]?.owner;
+
+  // Nest this fiber under its chain of synthesized server rows.
+  let target = out;
+  for (const link of facts.chain) {
+    let row = serverRows.get(link.info);
+    if (!row) {
+      row = {
+        name: link.name,
+        id: link.id,
+        owner: link.owner,
+        server: true,
+        props: [],
+        children: [],
+      };
+      serverRows.set(link.info, row);
+      target.push(row);
+    }
+    target = row.children!;
+  }
+  target.push(node);
+}
+
+function describeFiber(current: Fiber): FiberFacts {
+  const provided = providerContext(current);
+  const providedName =
+    provided && typeof provided.displayName === "string"
+      ? provided.displayName
+      : null;
+  const suspense = current.tag === SUSPENSE_TAG;
+  const activity = isActivityFiber(current);
+  const viewTransition = isViewTransitionFiber(current);
+  const structural = structuralName(current);
+  const name = providedName
+    ? `${providedName}.Provider`
+    : suspense
+      ? "Suspense"
+      : activity
+        ? "Activity"
+        : viewTransition
+          ? "ViewTransition"
+          : (structural ?? fiberName(current));
+  if (name === null) return NO_FACTS;
+  const node: InputNode = {
+    name,
+    id: stableId(current),
+    owner: ownerId(current),
+    dom: isHostFiber(current) || undefined,
+    props: propNames(current),
+    contexts: consumedContexts(current),
+    state: stateHookCount(current),
+    hooks: hookTypes(current),
+  };
+  if (provided && providedName) {
+    node.contextProvider = contextId(provided);
+    contextNames.set(node.contextProvider, providedName);
+    const value = (current.memoizedProps as { value?: unknown } | null)
+      ?.value;
+    if (value !== undefined) node.contextValue = previewValue(value);
+  }
+  if (suspense) {
+    node.suspense = true;
+    if (current.memoizedState !== null) node.suspended = true;
+  }
+  if (activity) {
+    node.activity = true;
+    const mode = (current.memoizedProps as { mode?: string } | null)?.mode;
+    if (mode === "hidden") node.hidden = true;
+  }
+  if (viewTransition) {
+    node.viewTransition = true;
+    const vtName = (current.memoizedProps as { name?: unknown } | null)
+      ?.name;
+    if (typeof vtName === "string" && vtName !== "auto")
+      node.vtName = vtName;
+  }
+  if (structural) {
+    node.structural = true;
+    // A Fragment fiber's memoizedProps IS its children (array or single
+    // element), not a props object; Object.keys would emit junk.
+    if (current.tag === FRAGMENT_TAG) node.props = [];
+    if (current.tag === PROFILER_TAG) {
+      node.profiler = true;
+      const id = (current.memoizedProps as { id?: unknown } | null)?.id;
+      if (typeof id === "string") node.profilerId = id;
+    }
+    if (current.tag === PORTAL_TAG) {
+      node.portal = true;
+      node.portalTarget = describePortalTarget(
+        (current.stateNode as { containerInfo?: unknown } | null)
+          ?.containerInfo,
+      );
+      node.props = [];
+    }
+  }
+  if (isErrorBoundary(current)) {
+    node.errorBoundary = true;
+    sawErrorBoundary = true;
+    if (didCapture(current)) node.caught = true;
+  }
+  if (isMemoFiber(current)) {
+    node.memo = true;
+    node.memoProps = memoPropPreviews(current);
+  }
+  if (isLazyFiber(current)) node.lazy = true;
+  const fiberOwner = (current as { _debugOwner?: Fiber | ServerComponentInfo })
+    ._debugOwner;
+  if (isCompositeFiber(current) && fiberOwner && isServerInfo(fiberOwner)) {
+    node.boundary = true;
+  }
+  const chain = debugInfoChain(current).map((info) => {
+    const infoOwner = info.owner;
+    return {
+      info: info as object,
+      id: serverInfoId(info),
+      name: cleanName(info.name ?? "ServerComponent"),
+      owner:
+        infoOwner && isServerInfo(infoOwner)
+          ? serverInfoId(infoOwner)
+          : undefined,
+    };
+  });
+  return { node, chain };
+}
+
+// --- Error ghost history ---------------------------------------------------
+// When a boundary catches, React unmounts the crashed subtree: fibers
+// destroyed, state lost, nothing left to extract. The tool has commit
+// history, so it can answer "what did this error cost": the moment a
+// boundary flips to caught, its children from the PREVIOUS snapshot are
+// frozen, marked departed, and spliced in above the fallback on every
+// snapshot until the boundary resets. Ids are the dead fibers' old ids;
+// the counter is monotonic, so they can't collide with live rows. The two
+// maps are per-session (owned by startExtraction, passed in): ghost history
+// and the diff's prev snapshot are both session state, kept at the same
+// altitude so a second session never inherits a first session's ghosts.
+
+function indexById(nodes: InputNode[], into: Map<string, InputNode>): void {
+  for (const node of nodes) {
+    into.set(node.id, node);
+    if (node.children) indexById(node.children, into);
+  }
+}
+
+function spliceLostSubtrees(
+  nodes: InputNode[],
+  lost: Map<string, InputNode[]>,
+  prevById: Map<string, InputNode>,
+): void {
+  for (const node of nodes) {
+    if (node.errorBoundary) {
+      if (node.caught) {
+        if (!lost.has(node.id)) {
+          const prev = prevById.get(node.id);
+          if (prev?.children)
+            lost.set(
+              node.id,
+              markAll(structuredClone(prev.children), "departed"),
+            );
+        }
+        // Whatever the boundary renders while caught IS its fallback;
+        // tag it so the catch region excludes it, then splice the
+        // frozen pre-crash rows above it.
+        for (const branch of node.children ?? [])
+          branch.fallbackOf = node.id;
+        const frozen = lost.get(node.id);
+        if (frozen) node.children = [...frozen, ...(node.children ?? [])];
+      } else {
+        lost.delete(node.id);
+      }
+    }
+    if (node.children) spliceLostSubtrees(node.children, lost, prevById);
+  }
+}
+
+// The interface's one temporal invariant, made loud (ADR-0002): this module
+// must be imported before react-dom, because bippy installs the DevTools
+// hook as an import side effect and React captures the hook's absence at
+// its own module evaluation — permanently. The violation leaves no
+// synchronous trace (React registers with the hook lazily, on first
+// render), so the check is deferred: if no renderer has registered a
+// while after extraction starts, the overwhelmingly likely cause is
+// import order. An error, not a throw — a late-booting app would make a
+// throw a false positive, and by check time there is no caller left to
+// catch it.
+const HOOK_GRACE_MS = 2000;
+
+function scheduleImportOrderCheck(): void {
+  if (typeof setTimeout !== "function") return;
+  setTimeout(() => {
+    if (isInstrumentationActive()) return;
+    console.error(
+      "react-parent-owner-trees: no React renderer registered with the DevTools hook " +
+        `within ${HOOK_GRACE_MS / 1000}s of startExtraction(). If your app ` +
+        "has already rendered, the extract entry was imported after " +
+        "react-dom — import it first (before anything that pulls in " +
+        "react-dom) so bippy can install the hook before React initializes. " +
+        "If your app simply mounts later than this, ignore this message.",
+    );
+  }, HOOK_GRACE_MS);
+}
+
+// One synchronous walk over a fiber subtree, no commit machinery or ghost
+// history: the seam the degradation corpus tests feed hand-built fibers
+// through — the same code path the live extraction takes, so the contract
+// is pinned where it is implemented.
+export function snapshotFiberTree(fiber: Fiber | null): InputNode[] {
+  const out: InputNode[] = [];
+  collectChildren(fiber, out, new Map());
+  return out;
+}
+
+export function startExtraction(
+  onTree: (
+    roots: InputNode[],
+    diff?: TreeDiff,
+    rendered?: ReadonlySet<string>,
+  ) => void,
+): void {
   let scheduled = false;
   // All live roots, in mount order. A page can have several (the app, dev
   // overlays, portal roots); keeping only the last-committed one shows
   // whichever app happened to commit most recently.
   const fiberRoots = new Map<object, Fiber>();
+  // The previously delivered snapshot (all roots, post-splice: diffed
+  // against exactly what the consumer saw last). Safe to keep by reference —
+  // nothing downstream mutates delivered trees; every pass copies. Undefined
+  // diff on the first commit: there is no prev to speak about.
+  let prevRoots: InputNode[] | null = null;
+  // Error ghost history (per-session, see the splice above): frozen
+  // pre-crash subtrees by boundary id, and the pre-splice index of the
+  // previous snapshot they freeze from.
+  const lostSubtrees = new Map<string, InputNode[]>();
+  let prevById = new Map<string, InputNode>();
+  // Ids of fibers that performed work since the last delivered snapshot.
+  // Collected at commit time, NOT read off flags at snapshot time: a
+  // bailed-out fiber is reused by reference and keeps the PerformedWork
+  // flag from whenever it last rendered, so a snapshot-time read would
+  // report every row that ever rendered. traverseRenderedFibers diffs
+  // against the alternate per commit, which is the honest signal — and
+  // batching several commits into one rAF unions their renders, which is
+  // exactly what "since the last snapshot" should mean.
+  let renderedIds = new Set<string>();
+
+  scheduleImportOrderCheck();
 
   instrument({
     onCommitFiberRoot(_rendererId, root) {
@@ -466,17 +703,46 @@ export function startExtraction(onTree: (roots: InputNode[]) => void): void {
       if (root.current.child) fiberRoots.set(root, root.current);
       else fiberRoots.delete(root);
 
+      // The blink is ambient, not accounting: if a hostile fiber shape
+      // breaks the render walk, this commit just doesn't blink.
+      try {
+        traverseRenderedFibers(root, (fiber, phase) => {
+          if (phase !== "unmount") renderedIds.add(stableId(fiber));
+        });
+      } catch {
+        /* snapshot delivery is unaffected */
+      }
+
       if (scheduled) return;
       scheduled = true;
       requestAnimationFrame(() => {
         scheduled = false;
         fiberById.clear();
+        sawErrorBoundary = false;
         const out: InputNode[] = [];
         const serverRows = new Map<object, InputNode>();
         for (const current of fiberRoots.values()) {
           collectChildren(current.child, out, serverRows);
         }
-        onTree(out);
+        // Ghost bookkeeping only while a boundary exists: indexing before
+        // splicing keeps the frozen subtrees ghost-free, and skipping both
+        // walks when the tree has no error boundary spares the common case
+        // two O(n) passes per commit. No boundary rows also means no anchor
+        // for frozen history — drop it and the stale index.
+        if (sawErrorBoundary) {
+          const nextById = new Map<string, InputNode>();
+          indexById(out, nextById);
+          spliceLostSubtrees(out, lostSubtrees, prevById);
+          prevById = nextById;
+        } else {
+          lostSubtrees.clear();
+          if (prevById.size) prevById = new Map();
+        }
+        const diff = prevRoots ? diffSnapshots(prevRoots, out) : undefined;
+        prevRoots = out;
+        const rendered = renderedIds;
+        renderedIds = new Set();
+        onTree(out, diff, rendered);
       });
     },
   });

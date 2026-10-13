@@ -10,6 +10,7 @@
 // records useContext consumers for the context area's elbow paths.
 // Deterministic, so it runs identically during SSG and hydration.
 import * as React from "react";
+import { describePortalTarget, markAll, previewValue } from "./core/producer";
 import type { InputNode } from "./core";
 
 export type { InputNode } from "./core";
@@ -44,9 +45,14 @@ export function markUseClient<T>(component: T): T {
 // `H`; React 18 under `ReactCurrentDispatcher.current`. Swapping it for
 // the duration of a component call is exactly what test renderers do.
 function swapDispatcher(dispatcher: unknown): () => void {
-  const internals =
-    (React as any).__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE ??
-    (React as any).__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED;
+  // Variable keys, not member access: webpack hard-errors on a static
+  // namespace access naming an export the installed React doesn't have
+  // (the 18 name is gone in 19 and vice versa).
+  const KEY_19 =
+    "__CLIENT_INTERNALS_DO_NOT_USE_OR_WARN_USERS_THEY_CANNOT_UPGRADE";
+  const KEY_18 = "__SECRET_INTERNALS_DO_NOT_USE_OR_YOU_WILL_BE_FIRED";
+  const reactAny = React as unknown as Record<string, any>;
+  const internals = reactAny[KEY_19] ?? reactAny[KEY_18];
   if ("H" in internals) {
     const prev = internals.H;
     internals.H = dispatcher;
@@ -58,31 +64,24 @@ function swapDispatcher(dispatcher: unknown): () => void {
   return () => (holder.current = prev);
 }
 
-// "body", "div#modal-root": enough to find the container, no more.
-function describeTarget(container: any): string {
-  if (!container?.tagName) return "node";
-  const tag = String(container.tagName).toLowerCase();
-  return container.id ? `${tag}#${container.id}` : tag;
-}
-
-function preview(value: unknown): string {
-  if (typeof value === "function")
-    return `ƒ ${(value as { name?: string }).name || "anonymous"}`;
-  if (typeof value === "string")
-    return JSON.stringify(
-      value.length > 24 ? `${value.slice(0, 24)}…` : value,
-    );
-  if (Array.isArray(value)) return `Array(${value.length})`;
-  if (value !== null && typeof value === "object") return "{…}";
-  return String(value);
-}
-
 export function elementToTree(
   root: React.ReactNode,
   prefix = "t",
-  opts?: { rsc?: boolean },
+  opts?: {
+    rsc?: boolean;
+    // Draw every Suspense boundary mid-suspension: primary subtree
+    // dormant (dimmed), fallback mounted. Default is the resting state,
+    // fallback drawn as a dashed potential subtree.
+    suspended?: boolean;
+    // Force every error boundary into its caught state: happy-path
+    // subtree drawn as departed (error-dashed), fallback mounted. Only
+    // boundaries with getDerivedStateFromError can be simulated.
+    errored?: boolean;
+  },
 ): InputNode[] {
   const rsc = Boolean(opts?.rsc);
+  const suspendAll = Boolean(opts?.suspended);
+  const errorAll = Boolean(opts?.errored);
   let n = 0;
 
   // Ownership travels with the ELEMENT, not with the walk position: an
@@ -170,7 +169,38 @@ export function elementToTree(
         getSnapshot(),
       useOptimistic: (v: unknown) => [v, noop],
       useActionState: (_a: unknown, s: unknown) => [s, noop, false],
+      // Returns the handler itself; effects never run in the static
+      // walk, so nothing ever calls it.
+      useEffectEvent: (fn: unknown) => fn,
+      // Compiler-output components: a fresh cache of unset sentinels
+      // makes every c(n) slot recompute, which is just a plain render.
+      useMemoCache: (size: number) =>
+        new Array(size).fill(Symbol.for("react.memo_cache_sentinel")),
     };
+  }
+
+  // Any hook the dispatcher doesn't model should name itself instead of
+  // surfacing as `C.H.useX is not a function` from minified React.
+  function guardDispatcher(dispatcher: Record<string, unknown>) {
+    return new Proxy(dispatcher, {
+      get(target, prop) {
+        if (typeof prop === "symbol" || prop in target)
+          return target[prop as string];
+        return () => {
+          throw new Error(`static walk: ${String(prop)} is not supported`);
+        };
+      },
+    });
+  }
+
+  // Only server components can be async (a client component has no way
+  // to be awaited), so the function's own constructor tells us the
+  // environment with no RSC mode needed. Holds as long as the code kept
+  // native async; downleveled async compiles to a plain function.
+  function isAsyncComponent(type: unknown): boolean {
+    return (
+      typeof type === "function" && type.constructor?.name === "AsyncFunction"
+    );
   }
 
   function callFunction(
@@ -178,8 +208,13 @@ export function elementToTree(
     props: unknown,
     node: InputNode,
   ): React.ReactNode {
+    // An async component returns a promise this sync walk can't open;
+    // calling it would only fire its side effects up to the first await
+    // and leave an unhandled rejection behind. Server-marked leaf row
+    // (the marking happens in componentEnv).
+    if (isAsyncComponent(type)) return null;
     const record = { contexts: new Set<unknown>(), state: 0 };
-    const restore = swapDispatcher(makeDispatcher(record));
+    const restore = swapDispatcher(guardDispatcher(makeDispatcher(record)));
     try {
       return type(props);
     } finally {
@@ -217,7 +252,7 @@ export function elementToTree(
           name: "createPortal",
           structural: true,
           portal: true,
-          portalTarget: describeTarget(portal.containerInfo),
+          portalTarget: describePortalTarget(portal.containerInfo),
         };
         if (ownerId) node.owner = ownerId;
         const kids = walkList(portal.children, ownerId, serverEnv);
@@ -261,6 +296,12 @@ export function elementToTree(
     node: InputNode,
     serverEnv: boolean,
   ): boolean {
+    // Async means server, in or out of RSC mode, and regardless of any
+    // 'use client' marking (an async client component is invalid React).
+    if (isAsyncComponent(type)) {
+      node.server = true;
+      return true;
+    }
     if (!rsc) return serverEnv;
     if ((type as { $$useClient?: boolean })?.$$useClient) {
       if (serverEnv) node.boundary = true;
@@ -305,7 +346,27 @@ export function elementToTree(
     } else if (type === React.Suspense) {
       node.name = "Suspense";
       node.suspense = true;
-      kids = walkList(props.children as React.ReactNode, ownerId, serverEnv);
+      // The fallback is a declared alternative, readable straight from
+      // the prop, so it is always drawable. Resting: primary mounted,
+      // fallback dashed-potential below it. Suspended: the roles flip in
+      // place — primary dormant (alive as hidden Offscreen fibers, state
+      // preserved), fallback mounted.
+      const primary = walkList(
+        props.children as React.ReactNode,
+        ownerId,
+        serverEnv,
+      );
+      const fallback =
+        props.fallback != null
+          ? walkList(props.fallback as React.ReactNode, ownerId, serverEnv)
+          : [];
+      for (const branch of fallback) branch.fallbackOf = node.id;
+      if (suspendAll && fallback.length > 0) {
+        node.suspended = true;
+        kids = [...markAll(primary, "dormant"), ...fallback];
+      } else {
+        kids = [...primary, ...markAll(fallback, "potential")];
+      }
     } else if (type === React.Profiler) {
       node.name = "Profiler";
       node.structural = true;
@@ -327,7 +388,8 @@ export function elementToTree(
       const id = ctxId(type);
       node.name = `${contextName(id)}.Provider`;
       node.contextProvider = id;
-      if (props.value !== undefined) node.contextValue = preview(props.value);
+      if (props.value !== undefined)
+        node.contextValue = previewValue(props.value);
       const stack = ctxStack.get(type) ?? [];
       ctxStack.set(type, stack);
       stack.push(props.value);
@@ -358,7 +420,9 @@ export function elementToTree(
       const inner = type.type;
       node.name = type.displayName || inner.displayName || inner.name || "Memo";
       node.memo = true;
-      node.memoProps = keys.map((key) => `${key}: ${preview(props[key])}`);
+      node.memoProps = keys.map(
+        (key) => `${key}: ${previewValue(props[key])}`,
+      );
       // The directive may sit on the wrapper (markUseClient(memo(...))) or
       // on the wrapped function's module.
       kids = walkOutput(
@@ -380,11 +444,42 @@ export function elementToTree(
       const instance = new type(props);
       instance.props = props;
       if (instance.state != null) node.state = 1;
-      kids = walkOutput(
-        instance.render(),
-        node,
-        componentEnv(type, node, serverEnv),
-      );
+      const env = componentEnv(type, node, serverEnv);
+      const happy = walkOutput(instance.render(), node, env);
+      if (node.errorBoundary && errorAll && type.getDerivedStateFromError) {
+        // Force the caught state: what stood here draws as departed
+        // (error-dashed, "this is what the crash cost"), the fallback
+        // render below it as what's shown now. Boundaries that rely
+        // solely on componentDidCatch can't be simulated statically and
+        // keep their happy path.
+        node.caught = true;
+        instance.state = {
+          ...instance.state,
+          ...type.getDerivedStateFromError(new Error("figure")),
+        };
+        const shown = walkOutput(instance.render(), node, env);
+        for (const branch of shown) branch.fallbackOf = node.id;
+        kids = [...markAll(happy, "departed"), ...shown];
+      } else if (node.errorBoundary && (props as { fallback?: unknown }).fallback != null) {
+        // The declared alternative is only knowable when the boundary
+        // follows the fallback-prop convention; arbitrary render logic
+        // has no statically readable alternative, so no potential branch
+        // is guessed. walkOutput, not walkList: the fallback gets the
+        // same ownership treatment as the boundary's render output
+        // (already-tagged elements keep their real creator).
+        const declared = markAll(
+          walkOutput(
+            (props as { fallback?: React.ReactNode }).fallback,
+            node,
+            env,
+          ),
+          "potential",
+        );
+        for (const branch of declared) branch.fallbackOf = node.id;
+        kids = [...happy, ...declared];
+      } else {
+        kids = happy;
+      }
     } else {
       node.name = type.displayName || type.name || "Anonymous";
       kids = walkOutput(

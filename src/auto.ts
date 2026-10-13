@@ -2,11 +2,15 @@
 // classic <script> tag (must load before the app bundle so bippy's hook is
 // installed before react-dom evaluates; classic scripts run during parse,
 // module scripts are deferred, so any position in <head> works).
-import { contextName, startExtraction } from "./lib/extract";
+import {
+  contextName,
+  createPageHighlighter,
+  getNodeHostElements,
+  startExtraction,
+} from "./lib/extract";
 import { createTreeRenderer, type ArcStyle, type InputNode } from "./lib/core";
 
 const renderer = createTreeRenderer({
-  serverColor: "#d9822b",
   sizing: "fixed",
   hooks: true,
   serverRegions: true,
@@ -73,7 +77,7 @@ function stripDom(nodes: InputNode[]): InputNode[] {
 
 function createPanel() {
   const panel = document.createElement("aside");
-  panel.id = "react-trees-panel";
+  panel.id = "react-parent-owner-trees-panel";
   panel.style.cssText = [
     "--color-bg:#fdfdfd",
     "--color-text:#1a1a1a",
@@ -97,7 +101,7 @@ function createPanel() {
 
   panel.innerHTML = `
     <div style="display:flex;gap:16px;align-items:center;font-family:system-ui,sans-serif;font-size:12px;color:var(--color-text-lighter);position:sticky;top:0;left:0;background:var(--color-bg);padding-block:4px">
-      <strong style="color:var(--color-text-light)">react-trees</strong>
+      <strong style="color:var(--color-text-light)">react-parent-owner-trees</strong>
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer">
         <input type="checkbox" id="rt-show-dom" /> DOM nodes
       </label>
@@ -144,7 +148,11 @@ function createPanel() {
 }
 
 const panel = createPanel();
+const highlighter = createPageHighlighter();
 let latestRoots: InputNode[] = [];
+// Consumed by the next render() and then dropped: the blink replays on
+// commit-triggered renders only, never on a checkbox toggle re-render.
+let justRendered: ReadonlySet<string> | undefined;
 
 function render() {
   const showDom = (
@@ -155,8 +163,21 @@ function render() {
   )?.checked;
   let roots = scoped ? appOnly(latestRoots) : latestRoots;
   if (!showDom) roots = stripDom(roots);
-  panel.querySelector("#rt-parent")!.innerHTML = renderer.parentTreeSvg(roots);
-  panel.querySelector("#rt-owner")!.innerHTML = renderer.ownerTreeSvg(roots);
+  const blink = justRendered;
+  justRendered = undefined;
+  panel.querySelector("#rt-parent")!.innerHTML = renderer.parentTreeSvg(
+    roots,
+    blink,
+  );
+  panel.querySelector("#rt-owner")!.innerHTML = renderer.ownerTreeSvg(
+    roots,
+    blink,
+  );
+  // The page highlight follows the selection, re-resolved on every render:
+  // commits can remount the elements behind a selected row, and the fresh
+  // lookup keeps the outline on what exists now.
+  const selected = renderer.selectedId();
+  highlighter.highlight(selected ? getNodeHostElements(selected) : []);
 }
 
 panel.addEventListener("change", (event) => {
@@ -180,16 +201,24 @@ panel.addEventListener("click", (event) => {
   const context = target.closest?.("[data-context-toggle]");
   const boundary = target.closest?.("[data-boundary-toggle]");
   const memoRing = target.closest?.("[data-memo-toggle]");
+  const select = target.closest?.("[data-select-toggle]");
   if (fold) renderer.toggleFold(fold.getAttribute("data-fold-toggle")!);
   if (context)
     renderer.toggleContext(context.getAttribute("data-context-toggle")!);
   if (boundary)
     renderer.toggleBoundary(boundary.getAttribute("data-boundary-toggle")!);
   if (memoRing) renderer.toggleMemo(memoRing.getAttribute("data-memo-toggle")!);
-  if (fold || context || boundary || memoRing) render();
+  if (select && !fold && !context && !boundary && !memoRing)
+    renderer.toggleSelect(select.getAttribute("data-select-toggle")!);
+  if (fold || context || boundary || memoRing || select) render();
 });
 
-startExtraction((roots) => {
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Escape" && renderer.clearSelect()) render();
+});
+
+startExtraction((roots, _diff, rendered) => {
   latestRoots = roots;
+  justRendered = rendered;
   render();
 });

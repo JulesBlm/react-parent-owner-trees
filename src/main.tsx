@@ -1,6 +1,12 @@
 // extract must come first: bippy installs the DevTools hook on import, before
 // react-dom evaluates.
-import { contextName, getNodeSource, startExtraction } from "./lib/extract";
+import {
+  contextName,
+  createPageHighlighter,
+  getNodeHostElements,
+  getNodeSource,
+  startExtraction,
+} from "./lib/extract";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { DemoApp } from "./demo/DemoApp";
@@ -12,7 +18,6 @@ import {
 } from "./lib/core";
 
 const renderer = createTreeRenderer({
-  serverColor: "#d9822b",
   sizing: "fixed",
   sourceNav: true,
   collapse: true,
@@ -25,10 +30,22 @@ const parentEl = document.getElementById("parent-tree")!;
 const ownerEl = document.getElementById("owner-tree")!;
 
 let latestRoots: InputNode[] = [];
+// Consumed by the next render() and then dropped: the blink replays on
+// commit-triggered renders only, never on an interaction re-render.
+let justRendered: ReadonlySet<string> | undefined;
+
+// The page highlight follows the selection, re-resolved on every render:
+// commits can remount the elements behind a selected row, and the fresh
+// lookup keeps the outline on what exists now.
+const highlighter = createPageHighlighter();
 
 function render() {
-  parentEl.innerHTML = renderer.parentTreeSvg(latestRoots);
-  ownerEl.innerHTML = renderer.ownerTreeSvg(latestRoots);
+  const blink = justRendered;
+  justRendered = undefined;
+  parentEl.innerHTML = renderer.parentTreeSvg(latestRoots, blink);
+  ownerEl.innerHTML = renderer.ownerTreeSvg(latestRoots, blink);
+  const selected = renderer.selectedId();
+  highlighter.highlight(selected ? getNodeHostElements(selected) : []);
 }
 
 document.getElementById("panel")!.addEventListener("click", (event) => {
@@ -92,8 +109,9 @@ document.getElementById("show-arcs")!.addEventListener("change", (event) => {
   render();
 });
 
-startExtraction((roots) => {
+startExtraction((roots, _diff, rendered) => {
   latestRoots = roots;
+  justRendered = rendered;
   render();
 });
 

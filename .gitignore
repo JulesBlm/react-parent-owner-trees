@@ -12,6 +12,10 @@ dist
 dist-ssr
 *.local
 
+# Local agent/tooling state
+.claude/
+.playwright-mcp/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
@@ -27,3 +31,6 @@ dist-ssr
 fixtures/next-rsc/.next
 fixtures/next-rsc/node_modules
 dist-app
+
+/junk
+/experiments

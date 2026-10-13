@@ -5,7 +5,7 @@ import { defineConfig } from "tsup";
 // bippy. dist/ is shared with the vite auto.global.js build, so no clean.
 export default defineConfig({
   entry: {
-    core: "src/lib/core.ts",
+    core: "src/lib/core/index.ts",
     static: "src/lib/static.ts",
     extract: "src/lib/extract.ts",
   },

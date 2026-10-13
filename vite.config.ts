@@ -40,4 +40,7 @@ export default defineConfig({
   // dist/ belongs to the published library (tsup + auto.global.js); the
   // demo app build goes elsewhere so vite doesn't empty it.
   build: { outDir: "dist-app" },
+  // Agent worktrees nest under .claude/ and carry their own copies of the
+  // test files; vitest must not glob into them from the main checkout.
+  test: { exclude: ["**/node_modules/**", "**/.claude/**"] },
 });
