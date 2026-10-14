@@ -2,7 +2,7 @@
 // hooks strip. Pure given RenderState + ComposeCtx; the expanded-strip
 // overlay (which must paint over later rows) is a return value the composer
 // appends last, not a side channel.
-import { boundaryColor, boundaryKind, MEMO_COLOR, STATE_COLOR, SUSPENSE_COLOR, ERROR_COLOR } from "./colors";
+import { BG, TEXT, TEXT_LIGHT, TEXT_LIGHTER, boundaryColor, boundaryKind, MEMO_COLOR, STATE_COLOR, SUSPENSE_COLOR, ERROR_COLOR } from "./colors";
 import { escapeXml, FADE } from "./types";
 import type { ComposeCtx, Focus, InputNode, RenderState, Row } from "./types";
 
@@ -50,11 +50,11 @@ function hookGlyph(cat: HookCategory, cx: number): string {
     case "state":
       return `<circle cx="${cx}" r="2.4" fill="${STATE_COLOR}" />`;
     case "effect":
-      return `<path d="M${cx - 2.8},2.2 h5.6 L${cx},-2.8 Z" fill="var(--color-text)" />`;
+      return `<path d="M${cx - 2.8},2.2 h5.6 L${cx},-2.8 Z" fill="${TEXT}" />`;
     case "memo":
       return `<path d="M${cx - 2.6},1.2 a2.6,2.6 0 0 1 5.2,0 Z" fill="${MEMO_COLOR}" />`;
     case "ref":
-      return `<rect x="${cx - 2.2}" y="-2.2" width="4.4" height="4.4" fill="none" stroke="var(--color-text-light)" />`;
+      return `<rect x="${cx - 2.2}" y="-2.2" width="4.4" height="4.4" fill="none" stroke="${TEXT_LIGHT}" />`;
   }
 }
 
@@ -142,10 +142,10 @@ function hooksStrip(
             (m, i) =>
               hookGlyph(m.cat, i * HOOK_PITCH_OPEN) +
               `<text transform="translate(${i * HOOK_PITCH_OPEN + 2},8) rotate(45)" font-size="0.7em"
-                 fill="var(--color-text-light)" paint-order="stroke" stroke="var(--color-bg)" stroke-width="3">${m.label}</text>`,
+                 fill="${TEXT_LIGHT}" paint-order="stroke" stroke="${BG}" stroke-width="3">${m.label}</text>`,
           )
           .join("")}
-        ${extra > 0 ? `<text x="${runWidth + 8}" dy="0.28em" font-size="0.7em" fill="var(--color-text-lighter)">+${extra}</text>` : ""}
+        ${extra > 0 ? `<text x="${runWidth + 8}" dy="0.28em" font-size="0.7em" fill="${TEXT_LIGHTER}">+${extra}</text>` : ""}
       </g>`;
     return { inline: "", overlay };
   }
@@ -155,7 +155,7 @@ function hooksStrip(
     <title>${escapeXml(full)}</title>
     <rect x="${startX - 5}" y="-7" width="${shown.length * HOOK_PITCH + (extra > 0 ? 18 : 0) + 8}" height="14" fill="transparent" />
     ${shown.map((m, i) => hookGlyph(m.cat, startX + i * HOOK_PITCH)).join("")}
-    ${extra > 0 ? `<text x="${startX + shown.length * HOOK_PITCH + 2}" dy="0.28em" font-size="0.7em" fill="var(--color-text-lighter)">+${extra}</text>` : ""}
+    ${extra > 0 ? `<text x="${startX + shown.length * HOOK_PITCH + 2}" dy="0.28em" font-size="0.7em" fill="${TEXT_LIGHTER}">+${extra}</text>` : ""}
   </g>`,
   };
 }
@@ -188,10 +188,10 @@ export function nodeMarkup(
   const sel = (id: string) =>
     opt.select ? ` data-select-toggle="${id}" style="cursor:pointer"` : "";
   const fold = node.fold
-    ? ` <tspan font-weight="bold" fill="var(--color-text)" data-fold-toggle="${node.id}"
+    ? ` <tspan font-weight="bold" fill="${TEXT}" data-fold-toggle="${node.id}"
          style="cursor:pointer" text-decoration="underline">×${node.fold}</tspan>`
     : node.foldOpen
-      ? ` <tspan font-weight="bold" fill="var(--color-text-lighter)" data-fold-toggle="${node.id}"
+      ? ` <tspan font-weight="bold" fill="${TEXT_LIGHTER}" data-fold-toggle="${node.id}"
            style="cursor:pointer" text-decoration="underline">−${node.foldOpen}</tspan>`
       : "";
   // The 'use client' badge is the boundary's only mark: a fact about the
@@ -202,7 +202,7 @@ export function nodeMarkup(
   // means "came from the server"; it dresses like the other module-fact
   // badges (portal, lazy).
   const boundary = node.boundary
-    ? ` <tspan font-size="0.75em" font-style="italic" fill="var(--color-text-lighter)">'use client'<title>Server &#8594; client boundary: props arriving here crossed the network, so they had to be serializable</title></tspan>`
+    ? ` <tspan font-size="0.75em" font-style="italic" fill="${TEXT_LIGHTER}">'use client'<title>Server &#8594; client boundary: props arriving here crossed the network, so they had to be serializable</title></tspan>`
     : "";
   // Clickable markers: context providers and suspense/error boundaries
   // get a colored ring, a colored clickable name, and a filled circle
@@ -248,26 +248,26 @@ export function nodeMarkup(
   const fill = marker
     ? marker.active
       ? marker.color
-      : "var(--color-bg)"
+      : BG
     : notMounted
-      ? "var(--color-bg)"
+      ? BG
       : ghost
         ? SERVER_COLOR
         : node.dom || node.structural
-          ? "var(--color-bg)"
-          : "var(--color-text)";
+          ? BG
+          : TEXT;
   const stroke = marker
     ? marker.color
     : node.departed
       ? ERROR_COLOR
       : node.potential
-        ? "var(--color-text)"
+        ? TEXT
         : serverHost
           ? SERVER_COLOR
           : node.structural
-            ? "var(--color-text-lighter)"
+            ? TEXT_LIGHTER
             : node.dom
-              ? "var(--color-text)"
+              ? TEXT
               : "none";
   const dash = notMounted ? ` stroke-dasharray="2"` : "";
   const ghostTitle = node.departed
@@ -292,18 +292,18 @@ export function nodeMarkup(
   const nameFill = marker
     ? marker.color
     : node.unknown || node.structural
-      ? "var(--color-text-lighter)"
+      ? TEXT_LIGHTER
       : node.server
         ? SERVER_COLOR
         : null;
   const nameMarkup = `<tspan${nameAttrs}${nameItalic ? ` font-style="italic"` : ""}${nameFill ? ` fill="${nameFill}"` : ""}>${escapeXml(node.name)}</tspan>`;
   const profilerId =
     node.profilerId && marks.markers
-      ? ` <tspan font-size="0.75em" font-style="italic" fill="var(--color-text-lighter)">"${node.profilerId}"</tspan>`
+      ? ` <tspan font-size="0.75em" font-style="italic" fill="${TEXT_LIGHTER}">"${node.profilerId}"</tspan>`
       : "";
   const vtName =
     node.vtName && marks.markers
-      ? ` <tspan font-size="0.75em" font-style="italic" fill="var(--color-text-lighter)">"${node.vtName}"</tspan>`
+      ? ` <tspan font-size="0.75em" font-style="italic" fill="${TEXT_LIGHTER}">"${node.vtName}"</tspan>`
       : "";
   const suspended =
     node.suspended && marks.markers
@@ -319,15 +319,15 @@ export function nodeMarkup(
   // lands. Children keep normal elbows: within the target they nest as
   // drawn, only this row's "output lands here" is redirected.
   const portalTarget = node.portal
-    ? ` <tspan font-size="0.75em" font-style="italic" fill="var(--color-text-lighter)">&#8594; ${escapeXml(node.portalTarget ?? "node")}</tspan>`
+    ? ` <tspan font-size="0.75em" font-style="italic" fill="${TEXT_LIGHTER}">&#8594; ${escapeXml(node.portalTarget ?? "node")}</tspan>`
     : "";
   const lazyBadge = node.lazy
-    ? ` <tspan font-size="0.75em" font-style="italic" fill="var(--color-text-lighter)">lazy</tspan>`
+    ? ` <tspan font-size="0.75em" font-style="italic" fill="${TEXT_LIGHTER}">lazy</tspan>`
     : "";
   const activityMode = node.activity && marks.markers
     ? node.hidden
-      ? ` <tspan font-size="0.75em" font-style="italic" fill="var(--color-text)">hidden</tspan>`
-      : ` <tspan font-size="0.75em" font-style="italic" fill="var(--color-text-lighter)">visible</tspan>`
+      ? ` <tspan font-size="0.75em" font-style="italic" fill="${TEXT}">hidden</tspan>`
+      : ` <tspan font-size="0.75em" font-style="italic" fill="${TEXT_LIGHTER}">visible</tspan>`
     : "";
   const markerTitle = marker ? `<title>${marker.hint}</title>` : "";
   // Memo is a wrapper (a real fiber), so it draws as a filled disc the
@@ -361,16 +361,16 @@ export function nodeMarkup(
     ? ""
     : node.collapsed
       ? ` <tspan data-collapse-toggle="${node.id}" style="cursor:pointer"
-         font-weight="bold" fill="var(--color-text-lighter)">&#9656;&#8202;${node.collapsed}<title>${node.collapsed} rows hidden</title></tspan>`
+         font-weight="bold" fill="${TEXT_LIGHTER}">&#9656;&#8202;${node.collapsed}<title>${node.collapsed} rows hidden</title></tspan>`
       : node.children?.length
         ? ` <tspan data-collapse-toggle="${node.id}" style="cursor:pointer"
-           font-size="0.6em" fill="var(--color-text-lighter)" opacity="0.7">&#9662;<title>Hide this subtree</title></tspan>`
+           font-size="0.6em" fill="${TEXT_LIGHTER}" opacity="0.7">&#9662;<title>Hide this subtree</title></tspan>`
         : "";
   // Names the declared alternative while the boundary's area (and with
   // it the fallback overlay) is off — the compact scent, dressed like
   // the other declaration badges (portal, lazy).
   const fallbackBadge = fallbackName
-    ? ` <tspan font-size="0.75em" font-style="italic" fill="var(--color-text-lighter)">fallback: ${escapeXml(fallbackName)}<title>Declared fallback &#8212; not mounted; toggle the boundary to see it</title></tspan>`
+    ? ` <tspan font-size="0.75em" font-style="italic" fill="${TEXT_LIGHTER}">fallback: ${escapeXml(fallbackName)}<title>Declared fallback &#8212; not mounted; toggle the boundary to see it</title></tspan>`
     : "";
   const textContent = `${nameMarkup}${collapseBadge}${portalTarget}${lazyBadge}${profilerId}${vtName}${fold}${boundary}${suspended}${caught}${fallbackBadge}${activityMode}${memoBadge}${marks.ids ? ` <tspan font-size="0.8em" opacity="0.6">(${node.id})</tspan>` : ""}`;
   const strip = ctx.stripsInTree
@@ -389,7 +389,7 @@ export function nodeMarkup(
   // snapshot re-creates the elements. Group opacity multiplies on top,
   // so a focus-faded row's blink recedes with it.
   const blink = ctx.rendered?.has(node.id)
-    ? `<circle r="8" fill="var(--color-text-lighter)" opacity="0.25" pointer-events="none">
+    ? `<circle r="8" fill="${TEXT_LIGHTER}" opacity="0.25" pointer-events="none">
       <animate attributeName="opacity" from="0.25" to="0" dur="0.6s" fill="freeze" /></circle>`
     : "";
   // Boundary rows (Suspense, error boundaries, Profiler, Activity,
@@ -417,7 +417,7 @@ export function nodeMarkup(
   const diamond = node.unknown ? ` transform="rotate(45)"` : "";
   const glyph = node.unknown
     ? `<rect x="-2.8" y="-2.8" width="5.6" height="5.6"${diamond}
-      fill="var(--color-bg)" stroke="${node.departed ? ERROR_COLOR : "var(--color-text-lighter)"}"${dash}><title>Extraction failed on this fiber &#8212; the row is a placeholder (its name is the raw fiber tag); the subtree beneath it is real</title></rect>`
+      fill="${BG}" stroke="${node.departed ? ERROR_COLOR : TEXT_LIGHTER}"${dash}><title>Extraction failed on this fiber &#8212; the row is a placeholder (its name is the raw fiber tag); the subtree beneath it is real</title></rect>`
     : square
     ? `<rect x="-2.8" y="-2.8" width="5.6" height="5.6"
       fill="${squareFill}"
@@ -426,8 +426,8 @@ export function nodeMarkup(
       fill="${fill}"
       stroke="${stroke}"${dash}>${ghostTitle}</circle>`;
   const selectedOutline = node.unknown || square
-    ? `<rect x="-6" y="-6" width="12" height="12"${diamond} fill="none" stroke="var(--color-text)" stroke-opacity="0.6" />`
-    : `<circle r="${memo ? 8.5 : 6.5}" fill="none" stroke="var(--color-text)" stroke-opacity="0.6" />`;
+    ? `<rect x="-6" y="-6" width="12" height="12"${diamond} fill="none" stroke="${TEXT}" stroke-opacity="0.6" />`
+    : `<circle r="${memo ? 8.5 : 6.5}" fill="none" stroke="${TEXT}" stroke-opacity="0.6" />`;
   const svg = `<g transform="translate(${x},${y})"${opt.sourceNav ? ` data-node="${node.id}"` : ""}${opacity < 1 ? ` opacity="${opacity}"` : ""}>
     ${title}${markerTitle}${blink}
     ${hitCircle}
@@ -435,7 +435,7 @@ export function nodeMarkup(
     ${memoRing}
     ${glyph}
     ${stateDots}
-    <text dy="0.28em" x="6" fill="var(--color-text-light)">${textContent}</text>${
+    <text dy="0.28em" x="6" fill="${TEXT_LIGHT}">${textContent}</text>${
       strip.inline
         ? `
     ${strip.inline}`

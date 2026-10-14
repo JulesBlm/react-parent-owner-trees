@@ -5,7 +5,7 @@
 // the one stateful collaborator it touches is the color registry's assign
 // pre-pass, run at a fixed point (right after flatten) so slot choice is
 // row order, never paint order.
-import { boundaryColor, boundaryKind } from "./colors";
+import { BG, boundaryColor, boundaryKind } from "./colors";
 import { elbow, ownerArc, ownerArcPath } from "./edges";
 import { nodeMarkup, rowTextExtent } from "./rows";
 import { boundaryAreaMarkup, contextAreaMarkup, serverRegionMarkup } from "./areas";
@@ -294,7 +294,7 @@ export function composeTree(
       }
       for (const r of local) if (r.depth === 0) visitCardLinks(r.node);
       cards.push(`<g transform="translate(${x0},${y0})">
-      <rect width="${cardW}" height="${cardH}" rx="3" fill="var(--color-bg)"
+      <rect width="${cardW}" height="${cardH}" rx="3" fill="${BG}"
         fill-opacity="0.55" stroke="${color}" stroke-opacity="0.5" stroke-dasharray="3 2">
         <title>Declared fallback &#8212; not mounted; replaces this area when the boundary ${kind === "error" ? "catches" : "suspends"}</title></rect>
       <g transform="translate(${inset},17)"><g opacity="0.55">${localLinks.join("")}</g>${local

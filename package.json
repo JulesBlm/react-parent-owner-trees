@@ -73,9 +73,6 @@
     "react": ">=19 <20"
   },
   "peerDependenciesMeta": {
-    "bippy": {
-      "optional": true
-    },
     "react": {
       "optional": true
     }

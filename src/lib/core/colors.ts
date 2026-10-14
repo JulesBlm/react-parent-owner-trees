@@ -2,6 +2,17 @@
 // persistent assignment, and the node-kind classifier the colors key off.
 import type { ContextColorRegistry, InputNode, Row } from "./types";
 
+// --- Neutrals -------------------------------------------------------------
+// The four neutrals read from namespaced custom properties with light-mode
+// fallbacks, so the SVG renders correctly on any page and a dark host can
+// flip them by defining --rpot-* (README "Dark mode"). This is a dark/light
+// hook, not a theming API: the accent colors below stay literal so the
+// notation reads the same everywhere.
+export const BG = "var(--rpot-bg, #fdfdfd)";
+export const TEXT = "var(--rpot-text, #1a1a1a)";
+export const TEXT_LIGHT = "var(--rpot-text-light, #4a4a4a)";
+export const TEXT_LIGHTER = "var(--rpot-text-lighter, #8a8a8a)";
+
 // The red state dot from the published parents/owners diagrams.
 export const STATE_COLOR = "#d6336c";
 export const MEMO_COLOR = "#5f3dc4";

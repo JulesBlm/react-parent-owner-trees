@@ -84,18 +84,14 @@ function createPanel() {
   const panel = document.createElement("aside");
   panel.id = "react-parent-owner-trees-panel";
   panel.style.cssText = [
-    "--color-bg:#fdfdfd",
-    "--color-text:#1a1a1a",
-    "--color-text-light:#4a4a4a",
-    "--color-text-lighter:#8a8a8a",
     "position:fixed",
     "top:0",
     "right:0",
     "bottom:0",
     "width:min(880px,70vw)",
     "z-index:2147483646",
-    "background:var(--color-bg)",
-    "color:var(--color-text)",
+    "background:var(--rpot-bg, #fdfdfd)",
+    "color:var(--rpot-text, #1a1a1a)",
     "border-left:1px solid #e5e5e5",
     "box-shadow:-4px 0 16px rgba(0,0,0,0.06)",
     "font-family:monospace",
@@ -105,8 +101,8 @@ function createPanel() {
   ].join(";");
 
   panel.innerHTML = `
-    <div style="display:flex;gap:16px;align-items:center;font-family:system-ui,sans-serif;font-size:12px;color:var(--color-text-lighter);position:sticky;top:0;left:0;background:var(--color-bg);padding-block:4px">
-      <strong style="color:var(--color-text-light)">react-parent-owner-trees</strong>
+    <div style="display:flex;gap:16px;align-items:center;font-family:system-ui,sans-serif;font-size:12px;color:var(--rpot-text-lighter, #8a8a8a);position:sticky;top:0;left:0;background:var(--rpot-bg, #fdfdfd);padding-block:4px">
+      <strong style="color:var(--rpot-text-light, #4a4a4a)">react-parent-owner-trees</strong>
       <label style="display:flex;gap:4px;align-items:center;cursor:pointer">
         <input type="checkbox" id="rt-show-dom" /> DOM nodes
       </label>
@@ -126,8 +122,8 @@ function createPanel() {
       <button id="rt-hide" style="margin-left:auto;cursor:pointer">hide</button>
     </div>
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;align-items:start">
-      <div><h4 style="font-family:system-ui,sans-serif;font-weight:500;color:var(--color-text-lighter);margin:8px 0">Parent tree</h4><div id="rt-parent"></div></div>
-      <div><h4 style="font-family:system-ui,sans-serif;font-weight:500;color:var(--color-text-lighter);margin:8px 0">Owner tree</h4><div id="rt-owner"></div></div>
+      <div><h4 style="font-family:system-ui,sans-serif;font-weight:500;color:var(--rpot-text-lighter, #8a8a8a);margin:8px 0">Parent tree</h4><div id="rt-parent"></div></div>
+      <div><h4 style="font-family:system-ui,sans-serif;font-weight:500;color:var(--rpot-text-lighter, #8a8a8a);margin:8px 0">Owner tree</h4><div id="rt-owner"></div></div>
     </div>`;
 
   const badge = document.createElement("button");

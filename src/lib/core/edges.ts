@@ -1,6 +1,7 @@
 // Elbows and owner edges: pure geometry and markup. Where the old closure
 // accumulated arcLeftExtent as scratch, these functions return the leftmost
 // x their path reaches and the caller folds the minimum.
+import { TEXT, TEXT_LIGHT } from "./colors";
 import { FADE, GRID } from "./types";
 import type { ArcStyle, RenderState, Row } from "./types";
 
@@ -35,7 +36,7 @@ export function elbow(
   serverColor?: string,
   dx = 0,
 ): string {
-  return `<path d="M${x1 + dx},${y1} V${y2} H${x1 + GRID}" fill="none" stroke="${serverColor ?? "var(--color-text)"}"${faded ? ` opacity="${FADE}"` : ""}${serverColor ? `><title>Server render &#8212; this element was created on the server</title></path>` : " />"}`;
+  return `<path d="M${x1 + dx},${y1} V${y2} H${x1 + GRID}" fill="none" stroke="${serverColor ?? TEXT}"${faded ? ` opacity="${FADE}"` : ""}${serverColor ? `><title>Server render &#8212; this element was created on the server</title></path>` : " />"}`;
 }
 
 // Server-owned arcs: same relation as every other arc (who rendered
@@ -48,7 +49,7 @@ export function arcPath(d: string, accent: boolean, serverColor?: string): strin
       fill="none" stroke="${serverColor}"${accent ? ' stroke-width="1.5"' : ""} stroke-dasharray="2">
       <title>Server render &#8212; this element was created on the server</title></path>`;
   return `<path d="${d}"
-    fill="none" stroke="${accent ? "var(--color-text)" : "var(--color-text-light)"}"${accent ? ' stroke-width="1.5"' : ""} stroke-dasharray="2" />`;
+    fill="none" stroke="${accent ? TEXT : TEXT_LIGHT}"${accent ? ' stroke-width="1.5"' : ""} stroke-dasharray="2" />`;
 }
 
 // Returns the path data for an owner edge in the given style plus the

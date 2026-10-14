@@ -41,22 +41,26 @@ extraction additionally needs a development build of React; the static
 walker also works with production React.
 
 ```sh
-npm install react-parent-owner-trees bippy
+npm install react-parent-owner-trees
 ```
 
-`bippy` is an optional peer dependency: only the `/extract` entry needs it.
-If you only render diagrams from your own data, or only use the static
-walker, skip it.
+[bippy](https://github.com/aidenybai/bippy) (the fiber-access layer) is a
+peer dependency that npm and pnpm install automatically. Only the
+`/extract` entry uses it — and the script tag below needs no install at
+all. With Yarn, add bippy yourself if you import `/extract`.
 
 ## Quick start: script tag
 
-The standalone build attaches a tree panel to any dev-mode React app. Serve
-`dist/auto.global.js` from your page and load it as a **classic script in
-`<head>`, before your app bundle**:
+The standalone build attaches a tree panel to any dev-mode React app. It is
+one self-contained file — bippy is bundled inside, so there is nothing to
+install. Load it as a **classic script in `<head>`, before your app
+bundle**:
 
 ```html
-<script src="/auto.global.js"></script>
+<script src="https://unpkg.com/react-parent-owner-trees/dist/auto.global.js"></script>
 ```
+
+(Or serve `dist/auto.global.js` from the package yourself.)
 
 It adds a fixed panel with both trees, updated on every commit, plus a
 `hide` button and a badge to bring the panel back. On a large app, scope
@@ -187,6 +191,25 @@ one page never share toggles.
 | `sourceNav` | off | `data-node` attributes and a cmd-click source hint |
 | `serverColor` | a teal (`hsl(191 65% 40%)`) | the "came from the server" color |
 | `contextName` | — | resolves a context id to a display name; pass the `contextName` export of whichever producer you use |
+
+## Dark mode
+
+The diagrams render correctly on any page out of the box. The four neutral
+colors (background, three text weights) read from CSS custom properties
+with light-mode fallbacks, so a dark page can flip them:
+
+```css
+:root {
+  --rpot-bg: #1a1a1a;
+  --rpot-text: #ededed;
+  --rpot-text-light: #b5b5b5;
+  --rpot-text-lighter: #757575;
+}
+```
+
+This is deliberately the whole theming surface. The accent colors (state
+dots, memo discs, context palette, boundary colors) are part of the
+notation and stay fixed.
 
 ## Interaction
 

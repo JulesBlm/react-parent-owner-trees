@@ -3,18 +3,18 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>react-trees-tool</title>
+    <title>react-parent-owner-trees</title>
     <style>
       :root {
-        --color-bg: #fdfdfd;
-        --color-text: #1a1a1a;
-        --color-text-light: #4a4a4a;
-        --color-text-lighter: #8a8a8a;
+        --rpot-bg: #fdfdfd;
+        --rpot-text: #1a1a1a;
+        --rpot-text-light: #4a4a4a;
+        --rpot-text-lighter: #8a8a8a;
       }
       body {
         margin: 0;
-        background: var(--color-bg);
-        color: var(--color-text);
+        background: var(--rpot-bg);
+        color: var(--rpot-text);
         font-family: system-ui, sans-serif;
         display: grid;
         grid-template-columns: minmax(280px, 1fr) 2fr;
@@ -35,7 +35,7 @@
       #panel h4 {
         margin: 0 0 0.5rem;
         font-weight: 500;
-        color: var(--color-text-lighter);
+        color: var(--rpot-text-lighter);
       }
       #panel svg {
         font-family: monospace;
@@ -46,7 +46,7 @@
   <body>
     <div id="root"></div>
     <aside id="panel">
-      <div style="grid-column: 1 / -1; font-size: 12px; color: var(--color-text-lighter)">
+      <div style="grid-column: 1 / -1; font-size: 12px; color: var(--rpot-text-lighter)">
         <label style="cursor: pointer">
           <input type="checkbox" id="show-arcs" checked /> owner arcs
         </label>
