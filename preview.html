@@ -1,0 +1,59 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>notation preview — react-parent-owner-trees</title>
+    <style>
+      :root {
+        --rpot-bg: #fdfdfd;
+        --rpot-text: #1a1a1a;
+        --rpot-text-light: #4a4a4a;
+        --rpot-text-lighter: #8a8a8a;
+      }
+      body {
+        margin: 0;
+        padding: 1.5rem 2rem 4rem;
+        background: var(--rpot-bg);
+        color: var(--rpot-text);
+        font-family: system-ui, sans-serif;
+      }
+      header {
+        display: flex;
+        gap: 16px;
+        align-items: baseline;
+        font-size: 12px;
+        color: var(--rpot-text-lighter);
+        position: sticky;
+        top: 0;
+        background: var(--rpot-bg);
+        padding-block: 8px;
+        border-bottom: 1px solid #eee;
+      }
+      header strong { color: var(--rpot-text-light); font-weight: 500; }
+      section { margin-top: 2rem; }
+      section h3 {
+        font-weight: 500;
+        font-size: 13px;
+        color: var(--rpot-text-lighter);
+        margin: 0 0 0.5rem;
+      }
+      .trees { display: flex; gap: 2rem; align-items: flex-start; flex-wrap: wrap; }
+      svg { font-family: monospace; font-size: 13px; }
+    </style>
+  </head>
+  <body>
+    <header>
+      <strong>notation preview</strong>
+      <span>live renderers over the test fixtures — every toggle works</span>
+      owner edges
+      <select id="arc-style">
+        <option value="arc">arc (semicircle)</option>
+        <option value="stadium">capped arc (stadium)</option>
+      </select>
+      <label style="cursor:pointer"><input type="checkbox" id="show-arcs" checked /> owner arcs</label>
+    </header>
+    <main id="gallery"></main>
+    <script type="module" src="/src/preview.ts"></script>
+  </body>
+</html>
