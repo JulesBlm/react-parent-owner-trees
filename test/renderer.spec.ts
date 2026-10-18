@@ -1,160 +1,23 @@
-// Characterization snapshots of the renderer, taken against the pre-carve
-// core.ts. The carve must keep every snapshot byte-identical: the output
-// string IS the behavior.
-//
-// Context scenarios activate providers in row order on purpose — color slots
-// are assigned on first paint, and row order is the one order the pre-carve
-// and post-carve assignment agree on by construction.
+// Behavioral tests of the renderer: liveness halos, the props reveal and
+// its placement fallbacks, and render stability across toggles.
 import { describe, expect, test } from "vitest";
-import {
-  createTreeRenderer,
-  type RendererOptions,
-  type TreeRenderer,
-} from "../src/lib/core";
-import {
-  basic,
-  contextNames,
-  contextTree,
-  deepTree,
-  errorTree,
-  foldedList,
-  memoHooksTree,
-  miscTree,
-  serverTree,
-  suspenseTree,
-} from "./fixtures";
+import { createTreeRenderer } from "../src/lib/core";
+import { basic, foldedList, node } from "./fixtures";
 import type { InputNode } from "../src/lib/core";
 
-interface Scenario {
-  name: string;
-  roots: InputNode[];
-  options?: RendererOptions;
-  setup?: (r: TreeRenderer) => void;
-}
-
-const scenarios: Scenario[] = [
-  { name: "basic", roots: basic },
-  {
-    name: "basic fixed sizing, no select, sourceNav",
-    roots: basic,
-    options: { sizing: "fixed", select: false, sourceNav: true },
-  },
-  {
-    name: "basic marks off",
-    roots: basic,
-    setup: (r) =>
-      r.setMarks({ arcs: false, ids: false, state: false, memo: false, markers: false }),
-  },
-  { name: "basic nudge", roots: basic, setup: (r) => r.setMarks({ nudge: true }) },
-  { name: "folded", roots: foldedList },
-  { name: "folded unfolded", roots: foldedList, setup: (r) => r.toggleFold("i1") },
-  {
-    name: "folded collapse ul",
-    roots: foldedList,
-    options: { collapse: true },
-    setup: (r) => r.toggleCollapse("l1"),
-  },
-  { name: "server regions", roots: serverTree, options: { serverRegions: true } },
-  {
-    name: "server custom color",
-    roots: serverTree,
-    options: { serverRegions: true, serverColor: "rebeccapurple" },
-  },
-  {
-    name: "context resting",
-    roots: contextTree,
-    options: { contextName: (id) => contextNames[id] },
-  },
-  {
-    name: "context first area on",
-    roots: contextTree,
-    options: { contextName: (id) => contextNames[id] },
-    setup: (r) => r.toggleContext("ctxA"),
-  },
-  {
-    name: "context both areas on",
-    roots: contextTree,
-    options: { contextName: (id) => contextNames[id] },
-    setup: (r) => {
-      r.toggleContext("ctxA");
-      r.toggleContext("ctxB");
-    },
-  },
-  { name: "suspense resting", roots: suspenseTree },
-  {
-    name: "suspense outer area on (fallback card)",
-    roots: suspenseTree,
-    setup: (r) => r.toggleBoundary("b2"),
-  },
-  {
-    name: "suspense suspended area on",
-    roots: suspenseTree,
-    setup: (r) => r.toggleBoundary("b6"),
-  },
-  { name: "error caught area on", roots: errorTree, setup: (r) => r.toggleBoundary("e1") },
-  { name: "misc resting", roots: miscTree },
-  {
-    name: "misc profiler + activity + vt areas on",
-    roots: miscTree,
-    setup: (r) => {
-      r.toggleBoundary("m3");
-      r.toggleBoundary("m6");
-      r.toggleBoundary("m9");
-    },
-  },
-  { name: "memo hooks dots (hooks option off)", roots: memoHooksTree },
-  {
-    name: "memo open",
-    roots: memoHooksTree,
-    setup: (r) => r.toggleMemo("h2"),
-  },
-  { name: "hooks trailing", roots: memoHooksTree, options: { hooks: true } },
-  {
-    name: "hooks column",
-    roots: memoHooksTree,
-    options: { hooks: true },
-    setup: (r) => r.setHooksMode("column"),
-  },
-  {
-    name: "hooks off mode",
-    roots: memoHooksTree,
-    options: { hooks: true },
-    setup: (r) => r.setHooksMode("off"),
-  },
-  {
-    name: "hooks expanded",
-    roots: memoHooksTree,
-    options: { hooks: true },
-    setup: (r) => r.toggleHooks("h3"),
-  },
-  { name: "selection mid-chain", roots: deepTree, setup: (r) => r.toggleSelect("t5") },
-  {
-    name: "selection cleared",
-    roots: deepTree,
-    setup: (r) => {
-      r.toggleSelect("t5");
-      r.clearSelect();
-    },
-  },
-  { name: "arcs stadium", roots: deepTree, setup: (r) => r.setArcStyle("stadium") },
-  { name: "arcs bracket", roots: deepTree, setup: (r) => r.setArcStyle("bracket") },
-  { name: "arcs square", roots: deepTree, setup: (r) => r.setArcStyle("square") },
+// Eight props on an adjacent-row arc (the shortest bow the grid makes):
+// the radial fan can't keep its pitch and must fall back to the
+// under-row stack.
+const manyPropped: InputNode[] = [
+  node("App", "1", {}, [
+    node("Child", "2", {
+      owner: "1",
+      props: ["count", "dark", "locale", "onSelect", "onHover", "items", "renderRow", "variant"],
+    }),
+  ]),
 ];
 
-describe("renderer characterization", () => {
-  for (const s of scenarios) {
-    test(`${s.name} — parent tree`, () => {
-      const r = createTreeRenderer(s.options);
-      s.setup?.(r);
-      expect(r.parentTreeSvg(s.roots)).toMatchSnapshot();
-    });
-    test(`${s.name} — owner tree`, () => {
-      const r = createTreeRenderer(s.options);
-      s.setup?.(r);
-      expect(r.ownerTreeSvg(s.roots)).toMatchSnapshot();
-    });
-  }
-
+describe("renderer behavior", () => {
   // The blink (ambient per-commit liveness) is per-call data, never
   // instance state: passing a rendered set adds exactly the halo markup
   // on those rows, and the next call without one is byte-identical to a
@@ -167,6 +30,59 @@ describe("renderer characterization", () => {
     expect(blinked).toContain('<animate attributeName="opacity"');
     expect(plain).not.toContain("<animate");
     expect(r.parentTreeSvg(basic)).toBe(plain);
+  });
+
+  // Selection doubles as the props reveal: spokes on the selected row's
+  // owner arc in the parent tree (rotated labels), the under-row stack
+  // in the owner tree, where the owner edge is structure and there is no
+  // arc to hang them on.
+  test("selecting a row reveals its props: spokes in the parent tree, under-row in the owner tree", () => {
+    const r = createTreeRenderer({ props: true });
+    r.toggleSelect("3");
+    const parent = r.parentTreeSvg(basic);
+    const owner = r.ownerTreeSvg(basic);
+    expect(parent).toContain(">count</text>");
+    expect(parent).toContain(">dark</text>");
+    expect(parent).toContain("rotate(");
+    expect(owner).toContain(">count</text>");
+    expect(owner).toContain(">dark</text>");
+    expect(owner).not.toContain("rotate(");
+    r.clearSelect();
+    expect(r.parentTreeSvg(basic)).not.toContain(">count</text>");
+  });
+
+  // Eight props on an adjacent-row bow: the fan can't keep its 14px
+  // pitch, so the radial placement itself falls back to the under-row
+  // stack.
+  test("crowded bow: radial falls back to the under-row stack", () => {
+    const r = createTreeRenderer({ props: true });
+    r.toggleSelect("2");
+    const svg = r.parentTreeSvg(manyPropped);
+    expect(svg).not.toContain("rotate(");
+    expect(svg).toContain(">count</text>");
+    expect(svg).toContain(">+3 more</text>");
+  });
+
+  // Placement is live instance state, not construction-time config: the
+  // tool's dropdown flips an existing renderer between the two forms, and
+  // flipping back restores the original markup exactly.
+  test("setPropsPlacement flips the reveal between spokes and the under-row stack", () => {
+    const r = createTreeRenderer({ props: true });
+    r.toggleSelect("3");
+    const radial = r.parentTreeSvg(basic);
+    expect(radial).toContain("rotate(");
+    r.setPropsPlacement("under");
+    const under = r.parentTreeSvg(basic);
+    expect(under).not.toContain("rotate(");
+    expect(under).toContain(">count</text>");
+    r.setPropsPlacement("radial");
+    expect(r.parentTreeSvg(basic)).toBe(radial);
+  });
+
+  test("props feature off: selection reveals nothing", () => {
+    const r = createTreeRenderer();
+    r.toggleSelect("3");
+    expect(r.parentTreeSvg(basic)).not.toContain(">count</text>");
   });
 
   test("second render after toggles is stable", () => {

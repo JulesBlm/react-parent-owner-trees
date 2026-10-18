@@ -16,16 +16,26 @@ import {
   type ArcStyle,
   type HooksMode,
   type InputNode,
+  type PropsPlacement,
 } from "./lib/core";
+
+// The hooks strip is alpha notation: off unless opted into via
+// localStorage "rpot-alpha-hooks" = "1" (same flag the standalone build
+// reads). The hooks-mode select hides with it.
+const alphaHooks = localStorage.getItem("rpot-alpha-hooks") === "1";
 
 const renderer = createTreeRenderer({
   sizing: "fixed",
   sourceNav: true,
   collapse: true,
-  hooks: true,
+  props: true,
+  hooks: alphaHooks,
   serverRegions: true,
   contextName,
 });
+
+if (!alphaHooks)
+  (document.getElementById("hooks-ui") as HTMLElement).style.display = "none";
 
 const parentEl = document.getElementById("parent-tree")!;
 const ownerEl = document.getElementById("owner-tree")!;
@@ -186,6 +196,15 @@ document.getElementById("arc-style")!.addEventListener("change", (event) => {
   renderer.setArcStyle((event.target as HTMLSelectElement).value as ArcStyle);
   render();
 });
+
+document
+  .getElementById("props-placement")!
+  .addEventListener("change", (event) => {
+    renderer.setPropsPlacement(
+      (event.target as HTMLSelectElement).value as PropsPlacement,
+    );
+    render();
+  });
 
 document.getElementById("hooks-mode")!.addEventListener("change", (event) => {
   renderer.setHooksMode((event.target as HTMLSelectElement).value as HooksMode);

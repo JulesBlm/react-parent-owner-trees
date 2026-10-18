@@ -38,8 +38,15 @@ export default defineConfig({
   // cmd-click navigation lands where the JSX actually is.
   plugins: [react({ babel: { retainLines: true } }), openInEditor()],
   // dist/ belongs to the published library (tsup + auto.global.js); the
-  // demo app build goes elsewhere so vite doesn't empty it.
-  build: { outDir: "dist-app" },
+  // demo app build goes elsewhere so vite doesn't empty it. preview.html
+  // is the live notation gallery over the test fixtures (/preview.html in
+  // dev).
+  build: {
+    outDir: "dist-app",
+    rollupOptions: {
+      input: { main: "index.html", preview: "preview.html" },
+    },
+  },
   // Agent worktrees nest under .claude/ and carry their own copies of the
   // test files; vitest must not glob into them from the main checkout.
   test: { exclude: ["**/node_modules/**", "**/.claude/**"] },

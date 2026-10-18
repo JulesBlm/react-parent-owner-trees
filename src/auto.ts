@@ -13,11 +13,28 @@ import {
   scopeToSubtree,
   type ArcStyle,
   type InputNode,
+  type PropsPlacement,
 } from "./lib/core";
+
+// The hooks strip is alpha notation: off unless the host page opts in
+// (localStorage "rpot-alpha-hooks" = "1", or window.RPOT_ALPHA_HOOKS
+// before this script runs). try/catch because sandboxed iframes throw on
+// localStorage access.
+function alphaHooks(): boolean {
+  try {
+    if (localStorage.getItem("rpot-alpha-hooks") === "1") return true;
+  } catch {
+    /* sandboxed */
+  }
+  return Boolean(
+    (window as unknown as { RPOT_ALPHA_HOOKS?: boolean }).RPOT_ALPHA_HOOKS,
+  );
+}
 
 const renderer = createTreeRenderer({
   sizing: "fixed",
-  hooks: true,
+  hooks: alphaHooks(),
+  props: true,
   serverRegions: true,
   contextName,
 });
@@ -115,8 +132,10 @@ function createPanel() {
       <select id="rt-arc-style" style="cursor:pointer">
         <option value="arc">arc</option>
         <option value="stadium">stadium</option>
-        <option value="bracket">bracket</option>
-        <option value="square">square</option>
+      </select>
+      <select id="rt-props-placement" style="cursor:pointer" title="where a selected row's received props render">
+        <option value="radial">props on arc</option>
+        <option value="under">props under row</option>
       </select>
       <span id="rt-scope" style="min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"></span>
       <button id="rt-hide" style="margin-left:auto;cursor:pointer">hide</button>
@@ -245,12 +264,15 @@ panel.addEventListener("change", (event) => {
   const target = event.target as HTMLInputElement;
   if (target.id === "rt-arc-style")
     renderer.setArcStyle(target.value as ArcStyle);
+  if (target.id === "rt-props-placement")
+    renderer.setPropsPlacement(target.value as PropsPlacement);
   if (target.id === "rt-show-arcs")
     renderer.setMarks({ arcs: target.checked });
   if (
     target.id === "rt-show-dom" ||
     target.id === "rt-app-only" ||
     target.id === "rt-arc-style" ||
+    target.id === "rt-props-placement" ||
     target.id === "rt-show-arcs"
   )
     render();

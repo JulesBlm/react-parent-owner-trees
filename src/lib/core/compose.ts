@@ -6,7 +6,7 @@
 // pre-pass, run at a fixed point (right after flatten) so slot choice is
 // row order, never paint order.
 import { BG, boundaryColor, boundaryKind } from "./colors";
-import { elbow, ownerArc, ownerArcPath } from "./edges";
+import { elbow, ownerArc, ownerArcPath, radialProps, underProps } from "./edges";
 import { nodeMarkup, rowTextExtent } from "./rows";
 import { boundaryAreaMarkup, contextAreaMarkup, serverRegionMarkup } from "./areas";
 import {
@@ -133,17 +133,19 @@ export function composeTree(
     state.opt.collapse && state.collapsedIds.size > 0
       ? flatten(unprunedRoots)
       : rows;
+  let arcBottom = 0;
   if (fullRows !== rows && withArcs && state.marks.arcs) {
     const fullById = new Map(fullRows.map((r) => [r.node.id, r]));
     for (const r of fullRows)
       if (!r.node.dom && r.node.owner && fullById.has(r.node.owner)) {
-        const { leftExtent } = ownerArcPath(
+        const { leftExtent, bottomExtent } = ownerArcPath(
           fullById.get(r.node.owner)!,
           r,
           state.arcStyle,
           Boolean(r.node.memo) && state.marks.memo,
         );
         arcLeftExtent = Math.min(arcLeftExtent, leftExtent);
+        arcBottom = Math.max(arcBottom, bottomExtent);
       }
   }
   const maxDepth = Math.max(...fullRows.map((r) => r.depth), 0);
@@ -228,25 +230,74 @@ export function composeTree(
   // normally, and every other arc fades in place to the same strength as
   // faded rows — edges recede with the rows they connect, nothing changes
   // shape on focus.
+  // Selection doubles as the props reveal. The selected row's received
+  // props render as radial spokes on its owner arc ("radial", the
+  // default) or as a stack under the row ("under"); the under form is
+  // also the universal fallback — a fan that can't keep its pitch on a
+  // short bow, the owner tree, roots, owner out of scope, arcs off.
+  const stacks: string[] = [];
+  let stackBottom = 0;
+  let propsOnArc = false;
   const arcs =
     withArcs && state.marks.arcs
       ? rows
           .filter((r) => !r.node.dom && r.node.owner && byId.has(r.node.owner))
           .map((r) => {
             const o = byId.get(r.node.owner!)!;
-            const draw = (accent: boolean) => {
-              const { svg, leftExtent } = ownerArc(o, r, accent, state);
-              arcLeftExtent = Math.min(arcLeftExtent, leftExtent);
-              return svg;
-            };
-            if (!focus) return draw(false);
-            if (r.node.id === state.selectedId || o.node.id === state.selectedId)
-              return draw(true);
-            if (focus.keep.has(r.node.id) && focus.keep.has(o.node.id))
-              return draw(false);
-            return `<g opacity="${FADE}">${draw(false)}</g>`;
+            // With a selection, ONE arc answers "who rendered me": the
+            // selected row's incoming edge draws accented and carries
+            // the props reveal; every other arc fades with the rows.
+            // Without a selection all arcs render evenly.
+            const selectedArc =
+              focus !== null && r.node.id === state.selectedId;
+            const { svg, leftExtent, bottomExtent } = ownerArc(
+              o,
+              r,
+              selectedArc,
+              state,
+            );
+            arcLeftExtent = Math.min(arcLeftExtent, leftExtent);
+            arcBottom = Math.max(arcBottom, bottomExtent);
+            if (
+              selectedArc &&
+              state.opt.props &&
+              (r.node.props?.length ?? 0) > 0
+            ) {
+              const rad =
+                state.propsPlacement === "radial"
+                  ? radialProps(o, r, state.arcStyle, r.node.props!)
+                  : null;
+              if (rad) {
+                stacks.push(rad.svg);
+                arcLeftExtent = Math.min(arcLeftExtent, rad.leftExtent);
+                stackBottom = Math.max(stackBottom, rad.bottom + 8);
+              } else {
+                // "under" placement, or a fan that doesn't fit this bow.
+                // Overlay layer: the block paints over the (faded) rows
+                // that follow the selected one.
+                const block = underProps(r, r.node.props!);
+                overlays.push(block.svg);
+                stackBottom = Math.max(stackBottom, block.bottom + 16);
+              }
+              propsOnArc = true;
+            }
+            if (!focus) return svg;
+            if (selectedArc) return svg;
+            return `<g opacity="${FADE}">${svg}</g>`;
           })
       : [];
+
+  // No arc carried the reveal (owner tree, root rows, owner out of
+  // scope, arcs mark off, DOM rows): the under-row stack is the
+  // universal fallback.
+  if (state.opt.props && state.selectedId && !propsOnArc) {
+    const sel = byId.get(state.selectedId);
+    if (sel && (sel.node.props?.length ?? 0) > 0) {
+      const block = underProps(sel, sel.node.props!);
+      overlays.push(block.svg);
+      stackBottom = Math.max(stackBottom, block.bottom + 16);
+    }
+  }
 
   // A fallback branch can be taller than the subtree it replaces (one
   // lazy row, a multi-row fallback); the area stretches down to keep
@@ -320,10 +371,10 @@ export function composeTree(
     .join("");
 
   return svgWrap(
-    areas + links.join("") + arcs.join("") + rowMarkup + cards.join("") + overlays.join(""),
+    areas + links.join("") + arcs.join("") + stacks.join("") + rowMarkup + cards.join("") + overlays.join(""),
     fullRows.length,
     width,
-    cardBottom,
+    Math.max(cardBottom, stackBottom, arcBottom > 0 ? arcBottom + 14 : 0),
     arcLeftExtent,
     stripsInTree,
     state,

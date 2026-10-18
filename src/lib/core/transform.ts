@@ -174,15 +174,15 @@ export function stripPotential(
   return out;
 }
 
-const FOCUS_UP = 2;
-const FOCUS_DOWN = 2;
-
 // --- Selection focus ----------------------------------------------------
-// Observable-minimap style neighborhood view: click any node to focus it.
-// Kept rows: tree ancestors within FOCUS_UP, descendants within
-// FOCUS_DOWN, plus one hop in the owner graph regardless of tree distance
-// (the direct owner and ownees are the edges this tool exists to show).
-// Everything else fades in place — layout never shifts.
+// Click a node to focus its ancestry: the clicked row and every parent up
+// to the root stay, everything else fades in place — layout never shifts.
+// The parent chain answers "where am I"; the one accented owner arc (the
+// composer draws only the selected row's incoming arc at full strength)
+// answers "who rendered me". In the parent tree the owner always sits on
+// the chain — an element lands inside its owner's subtree — so the arc's
+// far end is never faded. (An earlier ±2-level-plus-owner-hops
+// neighborhood read as an arbitrary halo rather than an answer.)
 export function computeFocus(
   roots: InputNode[],
   byId: Map<string, Row>,
@@ -190,14 +190,8 @@ export function computeFocus(
 ): Focus | null {
   if (!selectedId || !byId.has(selectedId)) return null;
   const parentOf = new Map<string, string>();
-  const childrenOf = new Map<string, string[]>();
   function walk(node: InputNode): void {
-    const kids = node.children ?? [];
-    childrenOf.set(
-      node.id,
-      kids.map((k) => k.id),
-    );
-    for (const kid of kids) {
+    for (const kid of node.children ?? []) {
       parentOf.set(kid.id, node.id);
       walk(kid);
     }
@@ -206,19 +200,10 @@ export function computeFocus(
 
   const keep = new Set<string>([selectedId]);
   let up = parentOf.get(selectedId);
-  for (let i = 0; i < FOCUS_UP && up; i++) {
+  while (up) {
     keep.add(up);
     up = parentOf.get(up);
   }
-  let frontier = [selectedId];
-  for (let i = 0; i < FOCUS_DOWN; i++) {
-    frontier = frontier.flatMap((id) => childrenOf.get(id) ?? []);
-    frontier.forEach((id) => keep.add(id));
-  }
-  const owner = byId.get(selectedId)!.node.owner;
-  if (owner && byId.has(owner)) keep.add(owner);
-  for (const row of byId.values())
-    if (row.node.owner === selectedId) keep.add(row.node.id);
   return { keep };
 }
 

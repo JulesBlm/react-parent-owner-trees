@@ -5,13 +5,13 @@ Notation for React's Parent and Owner
 Trees](https://julesblom.com/writing/react-visual-notation). The library
 draws two SVG trees:
 
-- **Parent tree** — where each component's output lands in the markup.
-- **Owner tree** — which component rendered which. An element's owner is
+- **Parent tree**: where each component's output lands in the markup.
+- **Owner tree**: which component rendered which. An element's owner is
   the component whose JSX created it, so owner edges show where props come
   from.
 
-None of this structure lives in a single file — which component owns which,
-where props come from, what a boundary scopes — so reading it from code
+None of this structure (which component owns which, where props come from,
+what a boundary scopes) lives in a single file, so reading it from code
 means reconstructing it in working memory. A picture can hold it for you.
 The post draws that picture by hand; this library draws it from your app.
 
@@ -21,11 +21,11 @@ Built on [bippy](https://github.com/aidenybai/bippy) for fiber access.
 
 *The demo app as its two trees. In the parent tree, `Stats` and the
 `Post`s sit inside `Frame`'s markup, but the dashed arcs show `DemoApp`
-owns them — and the owner tree on the right makes that the structure:
+owns them. The owner tree on the right makes that the structure:
 slot composition, exactly where the two trees diverge.*
 
-Live extraction needs a **development build of React 19** — production
-builds strip owner information. The static walker (below) also works in
+Live extraction needs a **development build of React 19**, because
+production builds strip owner information. The static walker (below) also works in
 production builds and at build time.
 
 > [!NOTE]
@@ -46,13 +46,13 @@ npm install react-parent-owner-trees
 
 [bippy](https://github.com/aidenybai/bippy) (the fiber-access layer) is a
 peer dependency that npm and pnpm install automatically. Only the
-`/extract` entry uses it — and the script tag below needs no install at
+`/extract` entry uses it, and the script tag below needs no install at
 all. With Yarn, add bippy yourself if you import `/extract`.
 
 ## Quick start: script tag
 
 The standalone build attaches a tree panel to any dev-mode React app. It is
-one self-contained file — bippy is bundled inside, so there is nothing to
+one self-contained file: bippy is bundled inside, so there is nothing to
 install. Load it as a **classic script in `<head>`, before your app
 bundle**:
 
@@ -65,7 +65,7 @@ bundle**:
 It adds a fixed panel with both trees, updated on every commit, plus a
 `hide` button and a badge to bring the panel back. On a large app, scope
 the view down: select a row, click `scope to`, and both trees narrow to
-that subtree — a breadcrumb in the header zooms back out. The script must load
+that subtree. A breadcrumb in the header zooms back out. The script must load
 first so bippy can install the React DevTools hook before react-dom
 initializes.
 
@@ -76,8 +76,8 @@ The package has three entry points:
 | Entry | What it gives you | Dependencies |
 | --- | --- | --- |
 | `react-parent-owner-trees/core` | `createTreeRenderer` and the `InputNode` type | none |
-| `react-parent-owner-trees/extract` | `startExtraction` — live fiber extraction, one tree per commit | bippy, react (dev build) |
-| `react-parent-owner-trees/static` | `elementToTree` — element walker, no DOM needed | react |
+| `react-parent-owner-trees/extract` | `startExtraction`: live fiber extraction, one tree per commit | bippy, react (dev build) |
+| `react-parent-owner-trees/static` | `elementToTree`: element walker, no DOM needed | react |
 
 Wire extract to core like this:
 
@@ -105,7 +105,7 @@ startExtraction((roots, diff, rendered) => {
 `InputNode[]`, a `TreeDiff` against the previous snapshot, and the set of
 node ids that actually performed work in the commit (bailed-out
 reconciliation visits don't count). Pass that set to the SVG methods and
-the rows that rendered blink once, subtly — ambient liveness in the
+the rows that rendered blink once, subtly: ambient liveness in the
 Observable-minimap sense. It's per-call data, not renderer state: pass it
 only on commit-triggered renders, so your own interaction re-renders
 don't replay the blink. The renderer turns it all into SVG strings; you
@@ -118,7 +118,7 @@ is focused, outline the DOM region its output governs in the running app.
 `getNodeHostElements(id)` resolves a row to the elements behind it (the
 nearest host descendants for a component, the node itself for a host row;
 empty for rows with nothing on the page), and `createPageHighlighter()`
-draws — quiet fixed-position outlines that never affect page layout and
+draws quiet fixed-position outlines that never affect page layout and
 track scroll and resize. Re-resolve after every render so commits that
 remount elements keep the outline honest:
 
@@ -140,8 +140,8 @@ function render() {
 ### Import order
 
 bippy installs the React DevTools hook as a side effect of being imported.
-React checks for that hook exactly once, when react-dom first evaluates —
-if the hook is not there yet, extraction stays silent forever. So the
+React checks for that hook exactly once, when react-dom first evaluates.
+If the hook is not there yet, extraction stays silent forever. So the
 `/extract` entry (or the script tag) must load before anything that imports
 react-dom:
 
@@ -228,15 +228,15 @@ renderer method, then re-render both trees.
 | `data-memo-toggle` | `toggleMemo(id)` |
 | `data-hooks-toggle` | `toggleHooks(id)` |
 
-There are also direct setters — `setArcStyle`, `setHooksMode`, `setMarks`,
+There are also direct setters: `setArcStyle`, `setHooksMode`, `setMarks`,
 `setView` (hide DOM rows or structural rows), `clearSelect`, and
 `set*Active` variants of the toggles. See the `TreeRenderer` type for the
 full interface.
 
 The core entry also exports small helpers for working with trees outside
-the renderer: `scopeToSubtree` (narrow the view to one node's subtree —
-for a large app, render the region you're working on instead of the whole
-tree), `applyView`/`hideDom`/`hideStructural` (filter a tree the same way
+the renderer: `scopeToSubtree` (narrow the view to one node's subtree, so
+a large app can render just the region you're working on instead of the
+whole tree), `applyView`/`hideDom`/`hideStructural` (filter a tree the same way
 `setView` does), `diffSnapshots` (the `TreeDiff` between two snapshots),
 and `serializeTree`. Apply them between the extraction callback and the
 SVG methods:
@@ -254,37 +254,10 @@ to the full tree instead of blanking the panel.
 
 ## What the diagrams show
 
-- **Circles** — filled for components, hollow for DOM nodes. Solid elbows
-  are parent structure; dashed arcs are owner edges, pointing back to where
-  the props come from.
-- **State dots** — small red dots above a component, one per
-  useState/useReducer.
-- **Memo discs** — `React.memo` components sit in a violet disc; owner
-  arcs end at the disc, because props are delivered to the comparison gate.
-  Click the disc to see the memoized props the next comparison runs
-  against.
-
-  ![Stats in a violet memo disc with its retained props shown inline: count 0, label "clicks"](docs/images/memo-gate.png)
-- **Context providers** — colored rows (the context needs a
-  `displayName`). Click one to tint its scope, show its current value, and
-  draw delivery lines to every component that reads it.
-
-  ![ThemeContext's area: a tinted rect over the provider's subtree, the current value "light" as a dot at the right edge, and delivery lines into Stats and both Posts](docs/images/context-area.png)
-- **Suspense and error boundaries** — colored rings. Click one to tint
-  exactly the region it catches (its subtree minus nested boundaries of
-  the same kind). Suspended boundaries get a `suspended` badge; subtrees
-  unmounted by a crash are drawn dashed as what stood there before.
-- **Server components (RSC)** — React 19 server components appear as
-  italic rows in the server color, with regions behind contiguous server
-  rows and `'use client'` badges on the client entry points.
-- **`<Activity>`, `<Profiler>`, portals, `React.lazy`, Fragment,
-  StrictMode** — all get rows with their own marks; hidden `<Activity>`
-  subtrees render dimmed.
-- **Folding** — runs of four or more same-named siblings fold into one row
-  with a `×n` badge; click to unfold.
-- **Selection focus** — click any node to keep its neighborhood (two
-  levels up and down, plus its direct owner and ownees) at full strength
-  while everything else fades in place; layout never shifts.
+Every mark in the diagrams (circles, owner arcs, state dots, memo discs,
+context areas, boundary squares, server rows, folds) is summarized in the
+[notation overview](https://julesblom.com/react-trees/notation), with
+links into the full walkthrough post for each one.
 
 ## Known limitations
 

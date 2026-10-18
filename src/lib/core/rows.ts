@@ -335,25 +335,12 @@ export function nodeMarkup(
   // paints on top.
   const memo = node.memo && marks.memo;
   const memoRing = memo
-    ? `<circle r="6.5" fill="${MEMO_COLOR}" stroke="${MEMO_COLOR}"
+    ? `<circle r="5" fill="${MEMO_COLOR}" stroke="${MEMO_COLOR}"
         data-memo-toggle="${node.id}" style="cursor:pointer"><title>React.memo wraps this component &#8212; props are compared here. Click to show the retained props snapshot.</title></circle>`
     : "";
   const memoBadge =
     memo && state.activeMemos.has(node.id) && node.memoProps
       ? ` <tspan font-size="0.75em" fill="${MEMO_COLOR}">{ ${escapeXml(node.memoProps.join(", "))} }</tspan>`
-      : "";
-  // State dots stack upward from the circle: one red dot per state hook,
-  // capped at three (the title carries the true count). Above is the only
-  // free direction: the elbow comes in from the left, children leave
-  // below, the name sits to the right.
-  // The hooks strip subsumes the dots while it is on (same fact, richer
-  // mark); the dots come back when the strip is toggled off.
-  const stateDots =
-    node.state && marks.state && !ctx.stripsInTree
-      ? `<g fill="${STATE_COLOR}"><title>${node.state} state hook${node.state > 1 ? "s" : ""} here</title>${Array.from(
-          { length: Math.min(node.state, 3) },
-          (_, i) => `<circle cy="${-(memo ? 9.5 : 7) - i * 5}" r="2" />`,
-        ).join("")}</g>`
       : "";
   // Disclosure triangle, file-explorer grammar: a very small ▾ on every
   // row with children, ▸ plus the hidden count while collapsed.
@@ -378,7 +365,7 @@ export function nodeMarkup(
     : { inline: "" };
   const hitCircle = opt.select
     ? `<circle r="9" fill="transparent" data-select-toggle="${node.id}"
-      style="cursor:pointer"><title>Click to focus this node's neighborhood${opt.sourceNav ? `; &#8984;-click to open its source` : ""}</title></circle>`
+      style="cursor:pointer"><title>Click to focus: ancestors stay, the owner arc accents${opt.props ? ", received props show" : ""}${opt.sourceNav ? `; &#8984;-click to open its source` : ""}</title></circle>`
     : "";
   // The blink: this row performed work since the previous snapshot. A
   // halo behind the glyph fading from barely-there to gone — ambient
@@ -434,7 +421,6 @@ export function nodeMarkup(
     ${selected ? selectedOutline : ""}
     ${memoRing}
     ${glyph}
-    ${stateDots}
     <text dy="0.28em" x="6" fill="${TEXT_LIGHT}">${textContent}</text>${
       strip.inline
         ? `

@@ -2,7 +2,9 @@ import { defineConfig } from "tsup";
 
 // Library build: three entry points with strict dependency isolation.
 // core must stay import-free; static may import react; extract may import
-// bippy. dist/ is shared with the vite auto.global.js build, so no clean.
+// bippy. dist/ is shared with the vite auto.global.js build, which must run
+// AFTER this one (prepack does; vite has emptyOutDir: false) — clean here
+// keeps stale hashed chunks out of the tarball.
 export default defineConfig({
   entry: {
     core: "src/lib/core/index.ts",
@@ -12,6 +14,6 @@ export default defineConfig({
   format: ["esm"],
   dts: true,
   outDir: "dist",
-  clean: false,
+  clean: true,
   external: ["react", "react-dom", "bippy"],
 });

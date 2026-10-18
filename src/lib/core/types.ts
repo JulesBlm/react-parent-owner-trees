@@ -109,13 +109,17 @@ export interface Row {
 
 // --- Owner edge styles ----------------------------------------------------
 // Deep trees make semicircular arcs enormous (bulge = half the chord), so
-// alternative styles are prototyped behind a toggle. What made the
-// semicircles read as ONE relation repeated: identical entry angle
-// (perpendicular to the chord), one shared curve family, and bulge monotone
-// in span so nested ownership nests visually. Stadium and bracket keep
-// those properties while bounding the width; square trades the shared entry
-// angle for pure orthogonal routing.
-export type ArcStyle = "arc" | "stadium" | "bracket" | "square";
+// an alternative style is kept behind a toggle. What made the semicircles
+// read as ONE relation repeated: identical entry angle (perpendicular to
+// the chord), one shared curve family, and bulge monotone in span so
+// nested ownership nests visually. Stadium keeps those properties while
+// bounding the width. (Two more styles were tried and cut: square — pure
+// orthogonal routing — lost the shared entry angle and the edges stopped
+// reading as one relation; bracket — rounded lanes — kept it but never
+// earned its place next to stadium.)
+export type ArcStyle = "arc" | "stadium";
+
+export type PropsPlacement = "radial" | "under";
 
 // --- Mark staging ---------------------------------------------------------
 // The glossary figures introduce marks in dependency order, so each figure
@@ -125,7 +129,6 @@ export type ArcStyle = "arc" | "stadium" | "bracket" | "square";
 export interface MarkFlags {
   arcs: boolean;
   ids: boolean;
-  state: boolean;
   memo: boolean;
   // colored scope markers: context/boundary rings, name colors, badges
   markers: boolean;
@@ -174,6 +177,20 @@ export interface RendererOptions {
   sourceNav?: boolean;
   // Disclosure triangles + double-click subtree collapse.
   collapse?: boolean;
+  // Props reveal, folded into selection: focusing a row also shows the
+  // props it received — placed per propsPlacement (parent tree), or
+  // inline trailing the row (owner tree, rows with no arc in view).
+  props?: boolean;
+  // Initial placement for the selected row's received props in the parent
+  // tree; mutable per instance via setPropsPlacement (an option only so
+  // figures can open on either form).
+  // "radial" (default): one spoke per name, perpendicular to the owner
+  // arc, fanned from its apex — outside the bow on short spans, inside
+  // on long ones. "under": a stack hanging below the receiving row.
+  // Radial falls back to under per-reveal when the fan can't fit the
+  // bow (many props, short arc); the owner tree and rows with no arc in
+  // view always use under.
+  propsPlacement?: PropsPlacement;
   // The hooks strip subsystem.
   hooks?: boolean;
   // Translucent tint rects behind contiguous runs of server rows.
@@ -212,6 +229,7 @@ export interface TreeRenderer {
   toggleHooks(id: string): void;
   setHooksMode(mode: HooksMode): void;
   setArcStyle(style: ArcStyle): void;
+  setPropsPlacement(placement: PropsPlacement): void;
   setMarks(partial: Partial<MarkFlags>): void;
   setView(partial: Partial<ViewFlags>): void;
 }
@@ -223,6 +241,7 @@ export interface ResolvedOptions {
   select: boolean;
   sourceNav: boolean;
   collapse: boolean;
+  props: boolean;
   hooks: boolean;
   serverRegions: boolean;
   contextName: (id: string) => string | undefined;
@@ -253,6 +272,7 @@ export interface RenderState {
   readonly unfoldedRuns: ReadonlySet<string>;
   readonly collapsedIds: ReadonlySet<string>;
   readonly arcStyle: ArcStyle;
+  readonly propsPlacement: PropsPlacement;
   readonly hooksMode: HooksMode;
   readonly expandedHooksId: string | null;
   readonly view: ViewFlags;

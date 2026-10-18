@@ -15,15 +15,12 @@ export const TEXT_LIGHTER = "var(--rpot-text-lighter, #8a8a8a)";
 
 // The red state dot from the published parents/owners diagrams.
 export const STATE_COLOR = "#d6336c";
-export const MEMO_COLOR = "#5f3dc4";
+export const MEMO_COLOR = "#6849c4";
 
 // --- Context areas -------------------------------------------------------
 // Off by default; clicking a provider row toggles its area: a tinted rect
 // over the provider's parent subtree (the context's scope) plus elbow paths
 // to every fiber in range that reads the context.
-// The fifth slot is a muted indigo, not goldenrod: goldenrod sat 15 hue
-// degrees from the amber that now means "suspended", and the fifth
-// context color has no semantics to defend.
 export const CONTEXT_COLORS = [
   "#2f6fab",
   "#8f4bbf",
@@ -33,10 +30,6 @@ export const CONTEXT_COLORS = [
 ];
 
 // --- Suspense / error boundary catch regions -----------------------------
-// Amber = waiting (the pending color), red = failed, and the server teal
-// stays exclusively "came from the server". The amber is the exact value
-// the server grammar vacated when it went teal, so it is proven at these
-// mark sizes.
 export const ERROR_COLOR = "#c0392b";
 export const SUSPENSE_COLOR = "#d9822b";
 export const PROFILER_COLOR = "#64748b";

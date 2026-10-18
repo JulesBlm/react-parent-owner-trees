@@ -19,9 +19,12 @@ export function node(
 // Frame's markup, so parent and owner trees differ).
 export const basic: InputNode[] = [
   node("App", "1", {}, [
-    node("main", "2", { dom: true }, [
+    // Hosts carry owners too (live extraction reads _debugOwner off host
+    // fibers: App JSX'd <main> and <section>), so the owner tree nests
+    // them under App instead of floating them as ownerless roots.
+    node("main", "2", { dom: true, owner: "1" }, [
       node("Stats", "3", { owner: "1", props: ["count", "dark"] }),
-      node("section", "4", { dom: true }, [
+      node("section", "4", { dom: true, owner: "1" }, [
         node("Post", "5", { owner: "1", props: ["title"] }),
         node("Post", "6", { owner: "1" }),
       ]),

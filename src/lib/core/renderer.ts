@@ -21,6 +21,7 @@ import type {
   HooksMode,
   InputNode,
   MarkFlags,
+  PropsPlacement,
   RendererOptions,
   RenderState,
   TreeRenderer,
@@ -36,6 +37,7 @@ export function createTreeRenderer(
     select: options.select ?? true,
     sourceNav: options.sourceNav ?? false,
     collapse: options.collapse ?? false,
+    props: options.props ?? false,
     hooks: options.hooks ?? false,
     serverRegions: options.serverRegions ?? false,
     contextName: options.contextName ?? ((id: string) => id),
@@ -50,10 +52,10 @@ export function createTreeRenderer(
   const unfoldedRuns = new Set<string>();
   const collapsedIds = new Set<string>();
   let arcStyle: ArcStyle = "arc";
+  let propsPlacement: PropsPlacement = options.propsPlacement ?? "radial";
   let marks: MarkFlags = {
     arcs: true,
     ids: true,
-    state: true,
     memo: true,
     markers: true,
     nudge: false,
@@ -82,6 +84,9 @@ export function createTreeRenderer(
     },
     get arcStyle() {
       return arcStyle;
+    },
+    get propsPlacement() {
+      return propsPlacement;
     },
     get hooksMode() {
       return hooksMode;
@@ -165,6 +170,9 @@ export function createTreeRenderer(
     },
     setArcStyle(style: ArcStyle): void {
       arcStyle = style;
+    },
+    setPropsPlacement(placement: PropsPlacement): void {
+      propsPlacement = placement;
     },
     setMarks(partial: Partial<MarkFlags>): void {
       marks = { ...marks, ...partial };
